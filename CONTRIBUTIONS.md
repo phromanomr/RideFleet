@@ -2,8 +2,8 @@
 
 Phelipe Romano - 8135
 
-André Paz Neiva - 
+André Paz Neiva - 8103
 
-Sofia Castilho -
+Sofia Castilho - 8145
 
-Mariana Escorcer - 
+Mariana Escorcer - 8115
