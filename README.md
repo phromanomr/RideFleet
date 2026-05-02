@@ -1,15 +1,92 @@
+# VrumVrum 🚗
 
-# RideFleet
+Serviço de transporte por aplicativo com federação distribuída.
+Projeto da disciplina SIN 142 — Sistemas Distribuídos — UFV 2026/1.
 
-Este projeto foi desenvolvido como parte da disciplina de Sistemas Distribuídos, ministrada pelos professores Pedro Damaso e Rodrigo Moreira. A proposta consiste na criação do RideFleet, um sistema de transporte por aplicativo inspirado em plataformas como Uber, 99 e Lyft, com foco na simulação de desafios reais enfrentados por sistemas distribuídos em larga escala.
+## Pré-requisitos
 
-A turma foi dividida em grupos de quatro integrantes, sendo que cada grupo é responsável por desenvolver seu próprio serviço de gerenciamento de corridas. Além disso, um integrante de cada grupo participa da construção de um núcleo compartilhado, responsável por viabilizar a comunicação entre os diferentes serviços. Esse núcleo permite que, em situações de sobrecarga ou indisponibilidade, um sistema possa delegar corridas para outro, criando um ambiente distribuído colaborativo.
+- Python 3.12+
+- Docker Desktop
 
+## Como rodar
 
-# 🎯 Objetivos do Projeto
+### 1. Clone o repositório
 
-- Desenvolver um sistema distribuído inspirado em aplicações reais de transporte;
-- Implementar comunicação entre múltiplos serviços independentes;
-- Garantir consistência e controle de concorrência nas corridas;
-- Aplicar conceitos como travas distribuídas, consenso, commit distribuído e detecção de falhas;
-- Simular cenários reais de falhas, sobrecarga e cooperação entre sistemas.
+```bash
+git clone <url-do-repositorio>
+cd RideFleet
+```
+
+### 2. Crie o ambiente virtual
+
+```bash
+python -m venv venv
+```
+
+**Windows:**
+```bash
+.\venv\Scripts\activate
+```
+
+**Linux/Mac:**
+```bash
+source venv/bin/activate
+```
+
+### 3. Instale as dependências
+
+```bash
+pip install -r requirements.txt
+```
+
+### 4. Suba o banco e o Redis
+
+```bash
+docker compose up db redis -d
+```
+
+### 5. Rode a API
+
+```bash
+uvicorn app.main:app --reload
+```
+
+A API estará disponível em `http://localhost:8000`.
+Documentação interativa em `http://localhost:8000/docs`.
+
+## Endpoints disponíveis
+
+| Método | Rota | Descrição |
+|--------|------|-----------|
+| GET | `/health` | Health check do serviço |
+| POST | `/rides/` | Solicitar uma corrida |
+| GET | `/rides/{id}` | Consultar status de uma corrida |
+| GET | `/audit/rides/{id}` | Log causal da corrida (Lamport) |
+
+## Mecanismos de SD implementados
+
+| # | Requisito | Status |
+|---|-----------|--------|
+| 1 | Travas Distribuídas | 🚧 em desenvolvimento |
+| 2 | Saga / Commit Distribuído | 🚧 em desenvolvimento |
+| 3 | Consenso / Leilão | 🚧 em desenvolvimento |
+| 4 | Circuit Breaker | 🚧 em desenvolvimento |
+| 5 | Relógio Lógico de Lamport | ✅ implementado |
+
+## Estrutura do projeto
+
+```
+app/
+├── main.py              — entrypoint da API
+├── distributed/         — mecanismos de SD
+│   └── logical_clock.py — Req 5: Lamport
+├── models/
+│   ├── ride.py          — modelo da corrida
+│   └── schemas.py       — schemas Pydantic
+├── routers/
+│   ├── rides.py         — endpoints de corrida
+│   └── audit.py         — endpoints de auditoria
+frontend/                — interface do usuário
+infra/                   — configurações de infraestrutura
+tests/                   — testes unitários
+```
