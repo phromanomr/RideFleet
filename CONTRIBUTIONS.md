@@ -22,4 +22,5 @@ Mariana Escorcer - 8115
 - Relógio lógico de Lamport para auditoria distribuída
 - Infraestrutura Docker (Dockerfile e docker-compose.yml com PostgreSQL e Redis)
 - Modelo Location
-
+- Configuração de dependências (requirements.txt com FastAPI, Uvicorn, Pydantic, etc.)
+- Implementação do RideService para lógica de negócios
