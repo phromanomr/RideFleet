@@ -21,4 +21,5 @@ Mariana Escorcer - 8115
   - `GET /audit/rides/{id}` - log causal com ordenação causal
 - Relógio lógico de Lamport para auditoria distribuída
 - Infraestrutura Docker (Dockerfile e docker-compose.yml com PostgreSQL e Redis)
+- Modelo Location
 
