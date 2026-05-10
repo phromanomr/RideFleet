@@ -15,9 +15,6 @@ class RideStatus(str, Enum):
 
 @dataclass
 class Ride:
-    def __init__(self):
-        pass
-
     origin: Location
     destination: Location
     passenger_id: str
