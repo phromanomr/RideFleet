@@ -1,7 +1,9 @@
 from fastapi import APIRouter, HTTPException
 from app.models.schemas import RideRequest, RideResponse
 from app.models.ride import Ride
-from app.distributed.logical_clock import lamport, log_event
+from app.distributed.logical_clock import log_event
+from app.services.ride_service import solicitar_corrida
+from app import state
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 
@@ -17,9 +19,12 @@ async def request_ride(body: RideRequest):
     corrida.lamport_clock = await log_event(
         ride_id=corrida.id,
         event_type="ride_requested",
-        details={"origin": body.origin, "destination": body.destination}
+        details={"origin": body.origin.city, "destination": body.destination.city}
     )
     corridas[corrida.id] = corrida
+    print(f"Corrida solicitada: {corrida.id} - Passageiro: {corrida.passenger_id} - Origem: {corrida.origin.city} - Destino: {corrida.destination.city}")
+    corrida = await solicitar_corrida(corrida)
+
     return corrida
 
 @router.get("/{ride_id}", response_model=RideResponse)
