@@ -12,7 +12,7 @@ engine = create_async_engine(DATABASE_URL, echo=True)
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,
     expire_on_commit=False,
-    class_=AsyncSession
+    class_=AsyncSessions
 )
 
 class Base(DeclarativeBase):
