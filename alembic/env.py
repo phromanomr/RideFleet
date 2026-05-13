@@ -34,16 +34,13 @@ def do_run_migrations(connection):
     with context.begin_transaction():
         context.run_migrations()
 
+
 async def run_migrations_online() -> None:
     """Roda migrations com conexão real ao banco."""
-    connectable = create_async_engine(
-        config.get_main_option('sqlalchemy.url')
-    )
+    import os
+    db_url = os.getenv("DATABASE_URL") or config.get_main_option("sqlalchemy.url")
+
+    connectable = create_async_engine(db_url)
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await connectable.dispose()
-
-if context.is_offline_mode():
-    run_migrations_offline()
-else:
-    asyncio.run(run_migrations_online())
