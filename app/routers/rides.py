@@ -33,4 +33,27 @@ async def get_ride(ride_id: str, db: AsyncSession = Depends(get_db)):
     corrida = await buscar_corrida(ride_id, db)
     if not corrida:
         raise HTTPException(status_code=404, detail="Corrida não encontrada")
-    return corrida
+    return {
+        "id": corrida.id,
+        "status": corrida.status,
+        "passenger_id": corrida.passenger_id,
+        "driver_id": corrida.driver_id,
+        "valor": corrida.valor,
+        "lamport_clock": corrida.lamport_clock,
+        "origin": {
+            "lat": corrida.origin_lat,
+            "lng": corrida.origin_lng,
+            "street": corrida.origin_street,
+            "number": corrida.origin_number,
+            "city": corrida.origin_city,
+            "state": corrida.origin_state
+        },
+        "destination": {
+            "lat": corrida.destination_lat,
+            "lng": corrida.destination_lng,
+            "street": corrida.destination_street,
+            "number": corrida.destination_number,
+            "city": corrida.destination_city,
+            "state": corrida.destination_state
+        }
+    }
