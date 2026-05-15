@@ -1,0 +1,27 @@
+name: Continuous Integration
+
+on: 
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  continuous-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Using python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+        
+      - name: install requirements
+        run: |
+          pip install -r requirements.txt
+
+      - name: execute unitary tests
+        env:
+          PYTHONPATH: .
+        run: |
+          pytest -s -v
