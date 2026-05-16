@@ -9,10 +9,8 @@ services:
     environment:
       SERVICE_NAME: vrumvrum
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
-      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
-      - redis
     networks:
       - vrumvrum-net
 
@@ -29,17 +27,8 @@ services:
     networks:
       - vrumvrum-net
 
-  redis:
-    image: redis:7-alpine
-    command: redis-server --appendonly yes
-    volumes:
-      - redisdata:/data
-    networks:
-      - vrumvrum-net
-
 volumes:
   pgdata:
-  redisdata:
 
 networks:
   vrumvrum-net:

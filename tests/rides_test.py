@@ -1,7 +1,10 @@
+# Arquivo de testes do endpoint de corridas
+
 import pytest
 from httpx import AsyncClient, ASGITransport
 from app.main import app
 
+# Verificação da criação e aquisição de corridas
 @pytest.mark.asyncio
 async def test_rides():
     
@@ -9,6 +12,7 @@ async def test_rides():
 
     async with AsyncClient(transport = transport, base_url = "https://test_rides") as ac:
 
+        # Criação de corrida teste
         post_ride_response = await ac.post("/rides/", json={
             "passenger_id": "passageiro teste",
             "origin": {
@@ -23,9 +27,14 @@ async def test_rides():
             }
         })
 
+        # Verifica se foi bem sucedida
         assert post_ride_response.status_code == 200
 
+        # Faz a aquisição da corrida
         get_ride_response = await ac.get(f"/rides/{post_ride_response.json()["id"]}")
 
+        # Verifica se foi bem sucedida
         assert get_ride_response.status_code == 200
+
+        # Confirmação da correspondencia da corrida
         assert get_ride_response.json()["id"] == post_ride_response.json()["id"]

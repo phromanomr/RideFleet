@@ -1,3 +1,5 @@
+# Workflow de CI do VrumVrum
+
 name: Continuous Integration
 
 on: 
@@ -20,6 +22,17 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: docker compose
+        run: |
+          docker compose up -d db
+          sleep 5
+
+      # setup do banco de dados mockado
+      - name: setup test dataset
+        run: |
+          docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test;"
+
+      # Execução dos testes unitários
       - name: execute unitary tests
         env:
           PYTHONPATH: .
