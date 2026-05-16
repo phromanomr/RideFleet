@@ -5,6 +5,7 @@
 import os
 import pytest
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from httpx import AsyncClient, ASGITransport
 from sqlalchemy.orm import sessionmaker
 
 from app.main import app
