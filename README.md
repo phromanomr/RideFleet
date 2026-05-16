@@ -42,7 +42,7 @@ pip install -r requirements.txt
 ### 4. Suba o banco e o Redis
 
 ```bash
-docker compose up db redis -d
+docker compose up db -d
 ```
 
 ### 5. Rode a API
