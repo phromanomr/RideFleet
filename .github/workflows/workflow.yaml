@@ -20,6 +20,15 @@ jobs:
         run: |
           pip install -r requirements.txt
 
+      - name: docker compose
+        run: |
+          docker compose up -d db
+          sleep 5
+
+      - name: setup test dataset
+        run: |
+          docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test:"
+
       - name: execute unitary tests
         env:
           PYTHONPATH: .
