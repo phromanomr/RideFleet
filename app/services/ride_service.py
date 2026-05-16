@@ -1,5 +1,3 @@
-# app/services/ride_servide.py
-
 import random
 import asyncio
 from app.models.ride import Ride, RideStatus
@@ -12,6 +10,9 @@ from app.config import (
     DELAY_CONFIRMED_TO_IN_TRANSIT,
     DELAY_IN_TRANSIT_TO_COMPLETED, MAX_QUEUE_SIZE,
 )
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from app.models.ride_model import RideModel
 
 def tem_motorista_disponivel() -> bool:
     return state.motoristas_ocupados < MAX_DRIVERS
@@ -82,3 +83,39 @@ async def _delegar_ao_core(corrida: Ride):
     corrida.status = RideStatus.CANCELED
     await log_event(corrida.id, "ride_delegated_to_core", {})
     print(f"Corrida {corrida.id} delegada ao Core")
+
+async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
+    """Converte o dataclass Ride para RideModel e salva no banco."""
+    ride_db = RideModel(
+        id=corrida.id,
+        status=corrida.status,
+        origin_lat=corrida.origin.lat,
+        origin_lng=corrida.origin.lng,
+        origin_street=corrida.origin.street,
+        origin_number=corrida.origin.number,
+        origin_city=corrida.origin.city,
+        origin_state=corrida.origin.state,
+        destination_lat=corrida.destination.lat,
+        destination_lng=corrida.destination.lng,
+        destination_street=corrida.destination.street,
+        destination_number=corrida.destination.number,
+        destination_city=corrida.destination.city,
+        destination_state=corrida.destination.state,
+        passenger_id=corrida.passenger_id,
+        driver_id=corrida.driver_id,
+        valor=corrida.valor,
+        delegated_to=corrida.delegated_to,
+        lamport_clock=corrida.lamport_clock,
+    )
+    db.add(ride_db)
+    await db.commit()
+    await db.refresh(ride_db)
+    return ride_db
+
+
+async def buscar_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
+    """Busca uma corrida pelo id no banco."""
+    result = await db.execute(
+        select(RideModel).where(RideModel.id == ride_id)
+    )
+    return result.scalar_one_or_none()
