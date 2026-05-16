@@ -39,7 +39,7 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 4. Suba o banco e o Redis
+### 4. Suba o banco
 
 ```bash
 docker compose up db -d
