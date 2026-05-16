@@ -27,7 +27,7 @@ jobs:
 
       - name: setup test dataset
         run: |
-          docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test:"
+          docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test;"
 
       - name: execute unitary tests
         env:
