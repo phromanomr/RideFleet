@@ -83,12 +83,12 @@ async def _atribuir_motorista(corrida: Ride):
         state.fila.append(corrida)
         await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
         return
-
     if _motorista_aceitou():
         await _ocupar_motorista(motorista.id)
         corrida.status = RideStatus.MATCH
         corrida.driver_id = motorista.id
         await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
+        await atualizar_corrida(corrida)  # ← adiciona aqui
         asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
     else:
         state.fila.appendleft(corrida)
@@ -99,14 +99,17 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
     """Simula as transições de estado em background."""
     await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
     corrida.status = RideStatus.CONFIRM
+    await atualizar_corrida(corrida)
     await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
 
     await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
     corrida.status = RideStatus.IN_TRANSIT
+    await atualizar_corrida(corrida)
     await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
 
     await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
     corrida.status = RideStatus.COMPLETE
+    await atualizar_corrida(corrida)
     await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
     await _liberar_motorista(driver_id)
     await _processar_fila()
@@ -169,3 +172,16 @@ async def buscar_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
         select(RideModel).where(RideModel.id == ride_id)
     )
     return result.scalar_one_or_none()
+
+async def atualizar_corrida(corrida: Ride) -> None:
+    """Persiste as mudanças de status e driver_id da corrida no banco."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(RideModel).where(RideModel.id == corrida.id)
+        )
+        ride_db = result.scalar_one_or_none()
+        if ride_db:
+            ride_db.status = corrida.status
+            ride_db.driver_id = corrida.driver_id
+            ride_db.lamport_clock = corrida.lamport_clock
+            await db.commit()

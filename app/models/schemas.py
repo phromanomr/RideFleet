@@ -31,3 +31,8 @@ class DriverResponse(BaseModel):
     name: str
     license_plate: str
     available: bool
+
+class DriverStats(BaseModel):
+    total: int
+    available: int
+    busy: int

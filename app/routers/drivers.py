@@ -1,14 +1,17 @@
+from typing import List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.schemas import DriverRequest, DriverResponse
+from app.models.schemas import DriverRequest, DriverResponse, DriverStats
 from app.services.driver_service import (
     criar_motorista,
     listar_motoristas,
     buscar_motorista,
     atualizar_disponibilidade,
-    deletar_motorista
+    deletar_motorista,
+    contar_motoristas
 )
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
@@ -17,6 +20,15 @@ router = APIRouter(prefix="/drivers", tags=["drivers"])
 async def create_driver(body: DriverRequest, db: AsyncSession = Depends(get_db)):
     motorista = await criar_motorista(body.name, body.license_plate, db)
     return motorista
+
+@router.get("/all", response_model=List[DriverResponse], status_code=200)
+async def get_all_drivers(db: AsyncSession = Depends(get_db)):
+    motoristas = await listar_motoristas(db)
+    return motoristas
+
+@router.get("/stats", response_model=DriverStats, status_code=200)
+async def count_drivers(db: AsyncSession = Depends(get_db)):
+    return await contar_motoristas(db)
 
 @router.get("/{driver_id}", response_model=DriverResponse, status_code=200)
 async def get_driver(driver_id: str, db: AsyncSession = Depends(get_db)):
