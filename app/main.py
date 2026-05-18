@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from app.routers import rides, audit
+from app.routers import rides, audit, drivers
 
 app = FastAPI(
     title="VrumVrum",
@@ -9,6 +9,7 @@ app = FastAPI(
 
 app.include_router(rides.router)
 app.include_router(audit.router)
+app.include_router(drivers.router)
 @app.get("/health")
 def health():
     return {"status": "ok", "service": "vrumvrum"}
