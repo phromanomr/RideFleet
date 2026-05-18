@@ -7,6 +7,7 @@ from alembic import context
 # importa
 from app.database import Base
 from app.models.ride_model import RideModel  # noqa: F401
+from app.models.driver_model import DriverModel 
 
 config = context.config
 if config.config_file_name is not None:

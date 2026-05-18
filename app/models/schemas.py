@@ -21,3 +21,13 @@ class RideResponse(BaseModel):
 
     class Config:
         use_enum_values = True
+
+class DriverRequest(BaseModel):
+    name: str
+    license_plate: str
+
+class DriverResponse(BaseModel):
+    id: str
+    name: str
+    license_plate: str
+    available: bool
