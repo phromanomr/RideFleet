@@ -44,3 +44,13 @@ async def deletar_motorista(driver_id: str, db: AsyncSession) -> bool:
     await db.delete(motorista)
     await db.commit()
     return True
+
+async def contar_motoristas(db: AsyncSession) -> dict:
+    motoristas = await listar_motoristas(db)
+    total = len(motoristas)
+    disponiveis = sum(1 for m in motoristas if m.available)
+    return {
+        "total": total,
+        "available": disponiveis,
+        "busy": total - disponiveis
+    }
