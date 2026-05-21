@@ -32,9 +32,16 @@ jobs:
         run: |
           docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test;"
 
+      - name: run migrations
+        env:
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/vrumvrum_test
+        run: |
+          alembic upgrade head
+          
       # Execução dos testes unitários
       - name: execute unitary tests
         env:
           PYTHONPATH: .
+          DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/vrumvrum_test
         run: |
           pytest -s -v
