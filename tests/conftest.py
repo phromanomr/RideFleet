@@ -30,6 +30,10 @@ TestSession = sessionmaker(
     autocommit=False, autoflush=False, bind=engine, class_=AsyncSession
 )
 
+# Forçar o uso da sessão de testes
+import app.services.ride_service
+app.services.ride_service.AsyncSessionLocal = TestSession
+
 # Fixture para criação do setup do banco
 @pytest.fixture(autouse=True)
 async def setup_database():
