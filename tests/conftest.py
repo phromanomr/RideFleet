@@ -10,8 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import get_db, Base
-from app.models.driver import Driver 
-from app.models.ride import Ride
+from app.models.driver_model import DriverModel 
+from app.models.ride_model import RideModel
 from app.distributed.logical_clock import lamport, _audit_log
 
 # Definição da URL do banco de dados de teste
