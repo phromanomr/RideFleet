@@ -2,6 +2,7 @@ services:
 
   nginx:
     image: nginx:alpine
+    restart: always
     ports:
       - "80:80"
     volumes:
@@ -16,6 +17,7 @@ services:
 
   api_1:
     build: .
+    restart: always
     environment:
       SERVICE_NAME: vrumvrum
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
@@ -34,6 +36,7 @@ services:
 
   api_2:
     build: .
+    restart: always
     environment:
       SERVICE_NAME: vrumvrum
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
@@ -52,6 +55,7 @@ services:
 
   db:
     image: postgres:16-alpine
+    restart: always
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
