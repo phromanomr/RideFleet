@@ -22,7 +22,7 @@ def setup_logging():
             #JSON
             structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.stdlib.BoundLogger,
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
@@ -30,3 +30,37 @@ def setup_logging():
 def get_logger(name: str = "vrumvrum"):
     """Retorna um logger configurado com o nome do serviço."""
     return structlog.get_logger(name)
+
+def log_estruturado(
+        evento: str,
+        corrida_id: str | None = None,
+        estado_anterior: str | None = None,
+        estado_novo: str | None = None,
+        lamport_clock: int | None = None,
+        nivel: str = "INFO",
+        extras: dict | None = None,
+) -> None:
+    logger = get_logger()
+
+    campos = {
+        "servico": "vrumvrum",
+        "corrida_id": corrida_id,
+        "estado_anterior": estado_anterior,
+        "estado_novo": estado_novo,
+        "lamport_clock": lamport_clock,
+    }
+
+    #add campos extras se existirem
+    if extras:
+            campos.update(extras)
+
+    campos = {k: v for k, v in campos.items() if v is not None}
+
+    #seleciona nivel correto
+    nivel =  nivel.upper()
+    if nivel == "WARNING" or nivel == "WARN":
+        logger.warning(evento, **campos)
+    elif nivel == "ERROR":
+        logger.error(evento, **campos)
+    else:
+        logger.info(evento, **campos)

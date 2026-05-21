@@ -1,4 +1,3 @@
-
 from fastapi import APIRouter, HTTPException, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,7 +19,10 @@ async def request_ride(body: RideRequest, db: AsyncSession = Depends(get_db)):
     corrida.lamport_clock = await log_event(
         ride_id=corrida.id,
         event_type="ride_requested",
-        details={"origin": body.origin.city, "destination": body.destination.city}
+        details={"origin": body.origin.city, "destination": body.destination.city},
+        db=db,
+        estado_anterior=None,
+        estado_novo="request"
     )
 
     await salvar_corrida(corrida, db)
