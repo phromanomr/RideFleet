@@ -10,7 +10,7 @@ from app.models.ride import Ride, RideStatus
 from app.models.driver_model import DriverModel
 from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
-from app import state
+from app import state, metrics
 from app.config import (
     MAX_QUEUE_SIZE,
     REJECTION_CHANCE,
@@ -63,6 +63,8 @@ def _motorista_aceitou() -> bool:
 
 
 async def solicitar_corrida(corrida: Ride) -> Ride:
+    # Inicia monitoramento da corrida
+    metrics.registrar_inicio_corrida(corrida.id)
     if await tem_motorista_disponivel():
         await _atribuir_motorista(corrida)
     elif len(state.fila) < MAX_QUEUE_SIZE:
@@ -92,6 +94,7 @@ async def _atribuir_motorista(corrida: Ride):
         asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
     else:
         state.fila.appendleft(corrida)
+        metrics.registrar_erro()
         await log_event(corrida.id, "ride_rejected_by_driver", {"driver_id": motorista.id})
 
 
@@ -111,6 +114,9 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
     corrida.status = RideStatus.COMPLETE
     await atualizar_corrida(corrida)
     await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
+    # Atualiza métricas de monitoramento
+    metrics.registrar_fim_corrida(corrida.id)
+    metrics.registrar_sucesso()
     await _liberar_motorista(driver_id)
     await _processar_fila()
 
@@ -134,6 +140,7 @@ async def _delegar_ao_core(corrida: Ride):
       - Manter a corrida no state.corridas para o passageiro acompanhar
     """
     corrida.status = RideStatus.CANCELED
+    metrics.registrar_erro()
     await log_event(corrida.id, "ride_delegated_to_core", {"reason": "queue_full"})
 
 
