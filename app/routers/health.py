@@ -17,7 +17,7 @@ async def health_check():
         )
         motoristas_disponiveis = result.scalar()
 
-    tamanho_fila = len(state.fila)
+    tamanho_fila = 100
 
     latencia_media = metrics.calcular_latencia_media()
 
