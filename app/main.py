@@ -1,10 +1,24 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from app.routers import rides, audit, drivers, health
+from app.logging_config import setup_logging, get_logger
 
+# configura o logging ao iniciar
+setup_logging()
+logger = get_logger()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # exe ao iniciar
+    logger.info("servico_iniciado", servico="vrumvrum", version="1.0.0")
+    yield
+    # exe ao encerrar
+    logger.info("servico_encerrado", servico="vrumvrum")
 app = FastAPI(
     title="VrumVrum",
     description="Serviço de transporte distribuído -  SIN 142 UFV-CRP 2026/1",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.include_router(rides.router)
