@@ -1,14 +1,16 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from sqlalchemy import select, func
 from app.database import AsyncSessionLocal
 from app.models.driver_model import DriverModel
-from app import state, metrics
+from app import metrics  # Removemos o "state" daqui
+from app.services.rabbitmq_service import obter_tamanho_fila  # Importamos o serviço da fila
 import os
 
 router = APIRouter(tags=["Health"])
 
 @router.get("/health")
-async def health_check():
+async def health_check(request: Request):
+    # 1. Checa motoristas no banco
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(func.count())
@@ -17,10 +19,13 @@ async def health_check():
         )
         motoristas_disponiveis = result.scalar()
 
-    tamanho_fila = len(state.fila)
+    app_instance = request.app
+    
+    # 2. Busca o tamanho real da fila de entrada no RabbitMQ (Assíncrono)
+    tamanho_fila = await obter_tamanho_fila()
 
+    # 3. Métricas locais
     latencia_media = metrics.calcular_latencia_media()
-
     taxa_erro = metrics.calcular_taxa_erro()
 
     alertas = []

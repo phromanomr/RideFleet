@@ -1,19 +1,19 @@
 # app/services/ride_service.py
 
-import random
 import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.ride_model import RideModel
 
+from app.models.ride_model import RideModel
 from app.models.ride import Ride, RideStatus
+from app.models.location import Location
 from app.models.driver_model import DriverModel
 from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
-from app import state, metrics
+from app import metrics
+from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
 from app.config import (
     MAX_QUEUE_SIZE,
-    REJECTION_CHANCE,
     DELAY_MATCH_TO_CONFIRM,
     DELAY_CONFIRMED_TO_IN_TRANSIT,
     DELAY_IN_TRANSIT_TO_COMPLETED,
@@ -58,44 +58,75 @@ async def _liberar_motorista(driver_id: str):
             await db.commit()
 
 
-def _motorista_aceitou() -> bool:
-    return random.random() > REJECTION_CHANCE
-
-
 async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
     metrics.registrar_inicio_corrida(corrida.id)
-    if await tem_motorista_disponivel():
+    
+    tamanho_fila = await obter_tamanho_fila()
+    
+    # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
+    corrida_dict = {
+        "id": corrida.id,
+        "origin": corrida.origin.model_dump() if hasattr(corrida.origin, 'model_dump') else corrida.origin.dict(),
+        "destination": corrida.destination.model_dump() if hasattr(corrida.destination, 'model_dump') else corrida.destination.dict(),
+        "passenger_id": corrida.passenger_id,
+        "status": corrida.status.value,
+        "driver_id": corrida.driver_id,
+        "valor": corrida.valor,
+        "delegated_to": corrida.delegated_to,
+        "lamport_clock": corrida.lamport_clock,
+    }
+
+    if await tem_motorista_disponivel() and tamanho_fila == 0:
         await _atribuir_motorista(corrida)
-    elif len(state.fila) < MAX_QUEUE_SIZE:
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
+    elif tamanho_fila < MAX_QUEUE_SIZE:
+        # Se a fila local tem espaço manda pra lá
+        await publicar_corrida_entrada(corrida_dict)
+        await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
     else:
-        corrida_a_delegar = state.fila.popleft()
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
-        await _delegar_ao_core(corrida_a_delegar)
+        # Se overflow atingido manda para a fila do leilão
+        await publicar_corrida_saida(corrida_dict)
+        await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
+        
     return corrida
 
 
-async def _atribuir_motorista(corrida: Ride):
+async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
+    """
+    Worker chamado pelo consumidor do RabbitMQ na fila de entrada.
+    """
+    if not await tem_motorista_disponivel():
+        return False 
+        
+    # Recria o objeto dataclass Ride
+    corrida = Ride(
+        id=corrida_dict["id"],
+        origin=Location(**corrida_dict["origin"]),
+        destination=Location(**corrida_dict["destination"]),
+        passenger_id=corrida_dict["passenger_id"],
+        status=RideStatus(corrida_dict["status"]),
+        driver_id=corrida_dict.get("driver_id"),
+        valor=corrida_dict.get("valor"),
+        delegated_to=corrida_dict.get("delegated_to"),
+        lamport_clock=corrida_dict.get("lamport_clock", 0)
+    )
+    
+    sucesso = await _atribuir_motorista(corrida)
+    return sucesso
+
+
+async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()
     if not motorista:
-        # motorista sumiu entre a verificação e a atribuição — enfileira
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
-        return
-    if _motorista_aceitou():
-        await _ocupar_motorista(motorista.id)
-        corrida.status = RideStatus.MATCH
-        corrida.driver_id = motorista.id
-        await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
-        await atualizar_corrida(corrida)  # ← adiciona aqui
-        asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
-    else:
-        state.fila.appendleft(corrida)
-        metrics.registrar_erro()
-        await log_event(corrida.id, "ride_rejected_by_driver", {"driver_id": motorista.id})
+        return False
+        
+    await _ocupar_motorista(motorista.id)
+    corrida.status = RideStatus.MATCH
+    corrida.driver_id = motorista.id
+    await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
+    await atualizar_corrida(corrida)
+    asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
+    return True
 
 
 async def _simular_corrida(corrida: Ride, driver_id: str):
@@ -114,34 +145,12 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
     corrida.status = RideStatus.COMPLETE
     await atualizar_corrida(corrida)
     await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
+    
     # Atualiza métricas de monitoramento
     metrics.registrar_fim_corrida(corrida.id)
     metrics.registrar_sucesso()
     await _liberar_motorista(driver_id)
-    await _processar_fila()
-
-
-async def _processar_fila():
-    if not state.fila:
-        return
-    if not await tem_motorista_disponivel():
-        return
-    corrida = state.fila.popleft()
-    await _atribuir_motorista(corrida)
-
-
-async def _delegar_ao_core(corrida: Ride):
-    """
-    Placeholder — será implementado na Semana 3.
-    TODO:
-      - Chamar POST /rides no Core com o JSON de delegação
-      - Iniciar polling em background em GET /rides/{id}/status
-      - Atualizar o status da nossa corrida conforme o Core responder
-      - Manter a corrida no state.corridas para o passageiro acompanhar
-    """
-    corrida.status = RideStatus.CANCELED
-    metrics.registrar_erro()
-    await log_event(corrida.id, "ride_delegated_to_core", {"reason": "queue_full"})
+    # Obs: não chamamos mais _processar_fila() aqui pois o RabbitMQ faz esse gerenciamento de concorrência.
 
 
 async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
@@ -179,6 +188,7 @@ async def buscar_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
         select(RideModel).where(RideModel.id == ride_id)
     )
     return result.scalar_one_or_none()
+
 
 async def atualizar_corrida(corrida: Ride) -> None:
     """Persiste as mudanças de status e driver_id da corrida no banco."""
