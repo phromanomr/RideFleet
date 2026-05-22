@@ -5,12 +5,12 @@ from datetime import datetime
 from app.models.location import Location
 
 class RideStatus(str, Enum):
-    REQUEST = "request"
-    MATCH = "match"
-    CONFIRM = "confirm"
-    IN_TRANSIT = "in_transit"
-    COMPLETE = "complete"
-    CANCELED = "canceled"
+    REQUEST = "REQUEST"
+    MATCH = "MATCH"
+    CONFIRM = "CONFIRM"
+    IN_TRANSIT = "IN_TRANSIT"
+    COMPLETE = "COMPLETE"
+    CANCELED = "CANCELED"
 
 
 @dataclass

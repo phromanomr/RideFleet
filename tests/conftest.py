@@ -10,6 +10,8 @@ from sqlalchemy.orm import sessionmaker
 
 from app.main import app
 from app.database import get_db, Base
+from app.models.driver_model import DriverModel 
+from app.models.ride_model import RideModel
 from app.distributed.logical_clock import lamport, _audit_log
 
 # Definição da URL do banco de dados de teste
@@ -27,6 +29,10 @@ engine = create_async_engine(
 TestSession = sessionmaker(
     autocommit=False, autoflush=False, bind=engine, class_=AsyncSession
 )
+
+# Forçar o uso da sessão de testes
+from app.services import ride_service
+ride_service.AsyncSessionLocal = TestSession
 
 # Fixture para criação do setup do banco
 @pytest.fixture(autouse=True)
