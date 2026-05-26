@@ -1,3 +1,4 @@
+from app.logging_handlers import configurar_loki
 import logging
 import os
 import sys
@@ -8,7 +9,7 @@ def setup_logging():
 
     #tarefa 1: LOG level configurável via variável de ambiente
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
-    log_level = getattr(logging, log_level_Str, logging.INFO)
+    log_level = getattr(logging, log_level_str, logging.INFO)
 
     #tarefa 4: capturar logs do uvicorn no mesmo formato JSON
     for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
@@ -42,6 +43,9 @@ def setup_logging():
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
+
+    # tarefa 6: handler para loki se LOKI_URL estiver definida
+    configurar_loki()
 
 def get_logger(name: str = "vrumvrum"):
     """Retorna um logger configurado com o nome do serviço."""
