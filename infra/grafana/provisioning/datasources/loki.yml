@@ -1,3 +1,4 @@
+#auto-provisionar Loki como data source
 apiVersion: 1
 
 datasources:
