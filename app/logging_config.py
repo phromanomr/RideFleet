@@ -63,7 +63,6 @@ def log_estruturado(
     logger = get_logger()
 
     campos = {
-        "servico": "vrumvrum",
         "corrida_id": corrida_id,
         "estado_anterior": estado_anterior,
         "estado_novo": estado_novo,
