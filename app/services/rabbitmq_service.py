@@ -67,6 +67,7 @@ async def publicar_corrida_entrada(corrida_dict: dict):
 
 async def consumir_fila_entrada(callback):
     """Fica escutando mensagens na fila e chama o callback de processamento."""
+    # await asyncio.sleep(30) - para teste do log warning
     if not channel:
         return
     queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
