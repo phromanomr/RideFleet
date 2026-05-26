@@ -1,15 +1,29 @@
 import logging
+import os
+import sys
 import structlog
 
 def setup_logging():
     """Configura o structlog para saída em JSON estruturado."""
 
+    #tarefa 1: LOG level configurável via variável de ambiente
+    log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+    log_level = getattr(logging, log_level_Str, logging.INFO)
+
+    #tarefa 4: capturar logs do uvicorn no mesmo formato JSON
+    for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        uvicorn_logger = logging.getLogger(logger_name)
+        uvicorn_logger.handlers = []
+        uvicorn_logger.propagate = True
+
+
     # config o logging padrão do python
     logging.basicConfig(
         format="%(message)s",
-        level=logging.INFO,
+        level=log_level,
+        stream=sys.stdout,
     )
-
+    #tarefa 2: processor de exceções estruturadas
     #config o structlog
     structlog.configure(
         processors=[
@@ -19,10 +33,12 @@ def setup_logging():
             structlog.processors.TimeStamper(fmt="iso"),
             #add nome do serviço
             structlog.contextvars.merge_contextvars,
+            #stack traces em JSON
+            structlog.processors.format_exc_info,
             #JSON
             structlog.processors.JSONRenderer(),
         ],
-        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        wrapper_class=structlog.make_filtering_bound_logger(log_level),
         context_class=dict,
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
@@ -58,7 +74,7 @@ def log_estruturado(
 
     #seleciona nivel correto
     nivel =  nivel.upper()
-    if nivel == "WARNING" or nivel == "WARN":
+    if nivel in ("WARNING", "WARN"):
         logger.warning(evento, **campos)
     elif nivel == "ERROR":
         logger.error(evento, **campos)
