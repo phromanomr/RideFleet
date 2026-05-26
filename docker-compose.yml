@@ -24,6 +24,12 @@ services:
     depends_on:
       - rabbitmq
       - db
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -44,6 +50,12 @@ services:
     depends_on:
       - rabbitmq
       - db
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
     networks:
       - vrumvrum-net
 
@@ -78,7 +90,6 @@ services:
         - RABBITMQ_DEFAULT_USER=myuser
         - RABBITMQ_DEFAULT_PASS=mypassword
       healthcheck:
-        # Este comando é mais seguro para o RabbitMQ
         test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_support", "5672"]
         interval: 5s
         timeout: 5s
