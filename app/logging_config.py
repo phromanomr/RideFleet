@@ -7,7 +7,7 @@ import structlog
 def setup_logging():
     """Configura o structlog para saída em JSON estruturado."""
 
-    #LOG_LEVEL configurável
+    #LOG_LEVEL configurável (vai permitir DEBUG em desenvolvimento)
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
 
@@ -24,7 +24,7 @@ def setup_logging():
         level=log_level,
         stream=sys.stdout,
     )
-    #processor de exceções estruturadas
+    #processor de exceções estruturadas (captura e trata exceções no fluxo do programa)
     #config o structlog
     structlog.configure(
         processors=[
