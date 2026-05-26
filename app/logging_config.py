@@ -7,11 +7,11 @@ import structlog
 def setup_logging():
     """Configura o structlog para saída em JSON estruturado."""
 
-    #tarefa 1: LOG level configurável via variável de ambiente
+    #LOG_LEVEL configurável
     log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
     log_level = getattr(logging, log_level_str, logging.INFO)
 
-    #tarefa 4: capturar logs do uvicorn no mesmo formato JSON
+    #capturar logs do uvicorn no mesmo formato JSON
     for logger_name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
         uvicorn_logger = logging.getLogger(logger_name)
         uvicorn_logger.handlers = []
@@ -24,7 +24,7 @@ def setup_logging():
         level=log_level,
         stream=sys.stdout,
     )
-    #tarefa 2: processor de exceções estruturadas
+    #processor de exceções estruturadas
     #config o structlog
     structlog.configure(
         processors=[
@@ -44,7 +44,7 @@ def setup_logging():
         logger_factory=structlog.stdlib.LoggerFactory(),
     )
 
-    # tarefa 6: handler para loki se LOKI_URL estiver definida
+    #handler para loki se LOKI_URL estiver definida
     configurar_loki()
 
 def get_logger(name: str = "vrumvrum"):
