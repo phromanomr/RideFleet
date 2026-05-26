@@ -58,6 +58,8 @@ Internet
     └── api_2 (porta 8000)
 
  PostgreSQL (porta 5432) ← persistência
+ Loki (porta 3100)       ← coleta de logs
+ Grafana (porta 3000)    ← visualização de logs
 ```
 
 ---
@@ -76,14 +78,66 @@ Os mecanismos de sistemas distribuídos (travas, saga, consenso, circuit breaker
 
 ---
 
+## Visualizar Logs
+
+O VrumVrum envia logs estruturados em JSON para o **Grafana Loki**, visualizáveis via **Grafana**.
+
+### URLs
+
+| Serviço | URL | Credenciais |
+|---------|-----|-------------|
+| Grafana | `http://localhost:3000` | admin / admin |
+| Loki (API) | `http://localhost:3100` | — |
+
+### Consultar logs no Grafana
+
+1. Acessa `http://localhost:3000`
+2. No menu lateral, clica em **Explore**
+3. Seleciona o datasource **Loki**
+4. Em **Label filters** seleciona `service` = `vrumvrum` e clica **Run query**
+
+**Exemplos de queries LogQL:**
+
+Todos os logs do serviço:
+```
+{service="vrumvrum"}
+```
+
+Filtrar por corrida (substitui pelo UUID retornado no POST /rides):
+```
+{service="vrumvrum"} | json | corrida_id="<uuid-da-corrida>"
+```
+
+Apenas erros:
+```
+{service="vrumvrum", level="error"}
+```
+
+Filtrar por tipo de evento:
+```
+{service="vrumvrum"} | json | event="ride_requested"
+```
+
+### Variáveis de ambiente
+
+| Variável | Padrão | Descrição |
+|----------|--------|-----------|
+| `LOG_LEVEL` | `INFO` | Nível de log (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
+| `LOKI_URL` | — | URL do Loki (definida automaticamente pelo Docker) |
+
+---
+
 ## Estrutura do projeto
 
 ```
+
 app/
 ├── main.py                  — entrypoint da API
 ├── config.py                — constantes de configuração
 ├── state.py                 — estado em memória (fila, corridas)
 ├── database.py              — configuração do banco
+├── logging_config.py        — configuração de logs estruturados (structlog)
+├── logging_handlers.py      — handler HTTP para envio ao Loki
 ├── distributed/
 │   └── logical_clock.py     — integração com o relógio de Lamport do Core
 ├── models/
@@ -101,8 +155,12 @@ app/
 │   ├── ride_service.py      — lógica de negócio das corridas
 │   └── driver_service.py    — lógica de negócio dos motoristas
 infra/
-└── nginx/
-    └── nginx.conf           — configuração do load balancer
+├── nginx/
+│   └── nginx.conf           — configuração do load balancer
+└── grafana/
+    └── provisioning/
+        └── datasources/
+            └── loki.yml     — auto-provisioning do Loki como datasource
 alembic/                     — migrations do banco
 tests/                       — testes unitários
 ```

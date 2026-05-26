@@ -1,9 +1,11 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+import uuid
+from fastapi import FastAPI, Request
+import structlog
 from app.routers import rides, audit, drivers, health
 from app.logging_config import setup_logging, get_logger
-
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada
+
 
 # configura o logging ao iniciar
 setup_logging()
@@ -32,6 +34,16 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next): #correlaciona todos os request de uma corrida por request_id
+    """Bind de um UUID único a cada requisição para correlação de logs."""
+    request_id = str(uuid.uuid4())
+    structlog.contextvars.clear_contextvars()
+    structlog.contextvars.bind_contextvars(request_id=request_id)
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    return response
 
 app.include_router(rides.router)
 app.include_router(audit.router)
