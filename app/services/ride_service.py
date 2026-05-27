@@ -64,7 +64,7 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
     metrics.registrar_inicio_corrida(corrida.id)
     tamanho_fila = await obter_tamanho_fila()
-    
+
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
         "id": corrida.id,
@@ -84,16 +84,14 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     elif tamanho_fila < MAX_QUEUE_SIZE:
         log_estruturado("corrida_enfileirada", corrida_id=corrida.id,
                         extras={"queue_size": tamanho_fila + 1})
-        # Se a fila local tem espaço manda pra lá
         await publicar_corrida_entrada(corrida_dict)
         await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
     else:
         log_estruturado("overflow_delegado_ao_core", corrida_id=corrida.id,
                         nivel="WARN", extras={"queue_size": tamanho_fila})
-        # Se overflow atingido manda para a fila do leilão
         await publicar_corrida_saida(corrida_dict)
         await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
-        
+
     return corrida
 
 
@@ -102,8 +100,8 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
     Worker chamado pelo consumidor do RabbitMQ na fila de entrada.
     """
     if not await tem_motorista_disponivel():
-        return False 
-        
+        return False
+
     # Recria o objeto dataclass Ride
     corrida = Ride(
         id=corrida_dict["id"],
@@ -116,7 +114,7 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
         delegated_to=corrida_dict.get("delegated_to"),
         lamport_clock=corrida_dict.get("lamport_clock", 0)
     )
-    
+
     sucesso = await _atribuir_motorista(corrida)
     return sucesso
 
@@ -126,7 +124,7 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
     if not motorista:
         log_estruturado("motorista_nao_encontrado", corrida_id=corrida.id, nivel="WARN")
         return False
-        
+
     await _ocupar_motorista(motorista.id)
     corrida.status = RideStatus.MATCH
     corrida.driver_id = motorista.id
@@ -164,7 +162,7 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
                     estado_anterior="in_transit", estado_novo="complete",
                     extras={"driver_id": driver_id})
     await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
-    
+
     # Atualiza métricas de monitoramento
     metrics.registrar_fim_corrida(corrida.id)
     metrics.registrar_sucesso()
