@@ -30,7 +30,15 @@ motoristas_disponiveis = Gauge(
     "Número de motoristas disponíveis no momento",
 )
 
+corridas_por_status = Gauge(
+    "vrumvrum_corridas_por_status",
+    "Número de corridas agrupadas por status atual",
+    ["status"],   # label: "matched", "confirmed", "in_transit", "completed", etc.
+)
 
+# ---------------------------------------------------------------------------
+# Dicionário interno para calcular duração por corrida
+# ---------------------------------------------------------------------------
 _corridas_inicio: dict = {}
 
 
@@ -67,6 +75,19 @@ def atualizar_motoristas(quantidade: int):
     motoristas_disponiveis.set(quantidade)
 
 
+def atualizar_corridas_por_status(contagem_por_status: dict):
+    """
+    Atualiza o gauge de corridas por status.
+    Recebe um dict como {"matched": 2, "in_transit": 1, "completed": 5}.
+    Chamado pelo health check após consultar o banco.
+    """
+    for status, quantidade in contagem_por_status.items():
+        corridas_por_status.labels(status=status).set(quantidade)
+
+
+# ---------------------------------------------------------------------------
+# Funções legadas mantidas para não quebrar código que já as usa
+# ---------------------------------------------------------------------------
 def calcular_latencia_media() -> float:
     """Compatibilidade com health.py — retorna média das amostras do histogram."""
     samples = corrida_duracao.collect()

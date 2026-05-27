@@ -1,10 +1,9 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.responses import Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 
 from app.routers import rides, audit, drivers, health
-<<<<<<< Updated upstream
-=======
 from app.logging_config import setup_logging, get_logger
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada
 
@@ -30,12 +29,12 @@ async def lifespan(app: FastAPI):
     # exe ao encerrar
     logger.info("servico_encerrado", servico="vrumvrum")
 
->>>>>>> Stashed changes
 
 app = FastAPI(
     title="VrumVrum",
     description="Serviço de transporte distribuído - SIN 142 UFV-CRP 2026/1",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 app.include_router(rides.router)
