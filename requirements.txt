@@ -8,5 +8,14 @@ alembic==1.13.0
 python-dotenv==1.0.0
 pytest==9.0.3
 pytest-asyncio==1.3.0
+<<<<<<< Updated upstream
 httpx==0.28.1
 aiosqlite==0.22.1
+=======
+httpx==0.28.1        
+python-dotenv==1.0.0
+structlog==24.4.0
+PyYAML==6.0.3
+aio_pika==9.6.2
+prometheus-client==0.25.0
+>>>>>>> Stashed changes

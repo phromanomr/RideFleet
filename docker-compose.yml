@@ -42,8 +42,19 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
       INSTANCE_ID: api_2
     depends_on:
+<<<<<<< Updated upstream
       db:
         condition: service_healthy
+=======
+      - rabbitmq
+      - db
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
+>>>>>>> Stashed changes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -72,8 +83,83 @@ services:
     networks:
       - vrumvrum-net
 
+<<<<<<< Updated upstream
 volumes:
   pgdata:
+=======
+  rabbitmq:
+    image: rabbitmq:3.9.4-management
+    restart: always 
+    container_name: ridefleet-rabbitmq-1
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    environment:
+      - RABBITMQ_DEFAULT_USER=myuser
+      - RABBITMQ_DEFAULT_PASS=mypassword
+    healthcheck:
+        test: ["CMD", "rabbitmq-diagnostics", "ping"]
+        interval: 10s
+        timeout: 5s
+        retries: 5
+        start_period: 20s
+    networks:
+      - vrumvrum-net
+
+  # -------------------------------------------------------------------------
+  # Prometheus — coleta métricas do endpoint /metrics das APIs a cada 10s
+  # Acesse em: http://localhost:9090
+  # -------------------------------------------------------------------------
+  prometheus:
+    image: prom/prometheus:latest
+    restart: always
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - vrumvrum-net
+
+  # -------------------------------------------------------------------------
+  # Grafana — dashboards visuais lendo do Prometheus
+  # Acesse em: http://localhost:3000
+  # -------------------------------------------------------------------------
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    depends_on:
+      prometheus:
+        condition: service_healthy   # só sobe depois que o Prometheus estiver healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin123
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards
+    ports:
+      - "3000:3000"
+    networks:
+      - vrumvrum-net
+      
+volumes:
+  pgdata:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
+>>>>>>> Stashed changes
 
 networks:
   vrumvrum-net:

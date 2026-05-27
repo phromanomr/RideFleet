@@ -1,0 +1,9 @@
+apiVersion: 1
+
+providers:
+  - name: vrumvrum
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    options:
+      path: /etc/grafana/dashboards   # pasta onde o JSON do dashboard fica
