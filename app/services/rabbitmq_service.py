@@ -109,7 +109,6 @@ async def obter_tamanho_fila() -> int:
     try:
         queue = _queues.get(QUEUE_ENTRADA)
         if queue:
-            # Abre um channel temporário exclusivo para essa consulta
             temp_channel = await connection.channel()
             try:
                 # passive=True: só lê o estado da fila, sem criar nem modificar
@@ -118,7 +117,7 @@ async def obter_tamanho_fila() -> int:
                 )
                 return temp_queue.declaration_result.message_count
             finally:
-                await temp_channel.close()  # sempre fecha, mesmo se der erro
+                await temp_channel.close()
         return 0
     except Exception as e:
         logger.warning("obter_tamanho_fila_erro", error=str(e))
