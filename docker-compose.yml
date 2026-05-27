@@ -104,10 +104,6 @@ services:
     networks:
       - vrumvrum-net
 
-  # -------------------------------------------------------------------------
-  # Prometheus — coleta métricas do endpoint /metrics das APIs a cada 10s
-  # Acesse em: http://localhost:9090
-  # -------------------------------------------------------------------------
   prometheus:
     image: prom/prometheus:latest
     healthcheck:
@@ -123,10 +119,6 @@ services:
     networks:
       - vrumvrum-net
 
-  # -------------------------------------------------------------------------
-  # Grafana — dashboards visuais lendo do Prometheus
-  # Acesse em: http://localhost:3000  (admin / admin no primeiro login)
-  # -------------------------------------------------------------------------
   grafana:
     image: grafana/grafana:latest
     restart: always
