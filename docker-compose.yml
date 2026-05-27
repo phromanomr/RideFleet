@@ -42,10 +42,6 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
       INSTANCE_ID: api_2
     depends_on:
-<<<<<<< Updated upstream
-      db:
-        condition: service_healthy
-=======
       - rabbitmq
       - db
     command: [
@@ -54,7 +50,6 @@ services:
       "-timeout", "60s",
       "./entrypoint.sh"
     ]
->>>>>>> Stashed changes
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -83,10 +78,6 @@ services:
     networks:
       - vrumvrum-net
 
-<<<<<<< Updated upstream
-volumes:
-  pgdata:
-=======
   rabbitmq:
     image: rabbitmq:3.9.4-management
     restart: always 
@@ -159,7 +150,6 @@ volumes:
   rabbitmq_data:
   prometheus_data:
   grafana_data:
->>>>>>> Stashed changes
 
 networks:
   vrumvrum-net:
