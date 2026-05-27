@@ -10,6 +10,12 @@ Projeto da disciplina SIN 142 — Sistemas Distribuídos — UFV 2026/1.
 ## Como rodar
 
 ```bash
+python -m venv venv
+```
+```bash
+venv\Scripts\activate  
+```
+```bash
 docker compose up --build
 ```
 
