@@ -235,12 +235,12 @@ async def listar_corridas(db: AsyncSession, status: str | None = None) -> list[R
     """
     q = select(RideModel)
     if status:
-        # convert string to enum if needed
+        # converte string para enum se precisar
         try:
             q = q.where(RideModel.status == RideStatus(status))
             log_estruturado("filtro_status_aplicado", extras={"status": status})
         except Exception:
-            # if invalid status, return empty
+            # se o status for invalido, retorna vazio
             log_estruturado("filtro_status_invalido", nivel="WARN", extras={"status": status})
             return []
     result = await db.execute(q)
