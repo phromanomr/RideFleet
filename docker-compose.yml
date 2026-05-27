@@ -126,24 +126,24 @@ services:
       - vrumvrum-net
 
   rabbitmq:
-    image: rabbitmq:3.9.4-management
-    container_name: ridefleet-rabbitmq-1
-    ports:
-      - "5672:5672"
-      - "15672:15672"
-    volumes:
-      - rabbitmq_data:/var/lib/rabbitmq
-    environment:
-      - RABBITMQ_DEFAULT_USER=myuser
-      - RABBITMQ_DEFAULT_PASS=mypassword
-    healthcheck:
-      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_support", "5672"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-      start_period: 10s
-    networks:
-      - vrumvrum-net
+      image: rabbitmq:3.9.4-management
+      container_name: ridefleet-rabbitmq-1
+      ports:
+        - "5672:5672"
+        - "15672:15672"
+      volumes:
+        - rabbitmq_data:/var/lib/rabbitmq
+      environment:
+        - RABBITMQ_DEFAULT_USER=myuser
+        - RABBITMQ_DEFAULT_PASS=mypassword
+      healthcheck:
+          test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+          interval: 10s
+          timeout: 10s
+          retries: 5
+          start_period: 30s
+      networks:
+        - vrumvrum-net
 
   prometheus:
     image: prom/prometheus:latest
@@ -160,27 +160,6 @@ services:
     networks:
       - vrumvrum-net
 
-  grafana:
-    image: grafana/grafana:latest
-    restart: always
-    depends_on:
-      prometheus:
-        condition: service_healthy   # só sobe depois que o Prometheus estiver healthy
-    healthcheck:
-      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
-      interval: 10s
-      timeout: 5s
-      retries: 3
-    environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin123
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./infra/grafana/provisioning:/etc/grafana/provisioning
-      - ./infra/grafana/dashboards:/etc/grafana/dashboards
-    ports:
-      - "3000:3000"
-    networks:
-      - vrumvrum-net
 
 volumes:
   pgdata:
