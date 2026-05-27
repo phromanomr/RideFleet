@@ -17,7 +17,6 @@ def setup_logging():
         uvicorn_logger.handlers = []
         uvicorn_logger.propagate = True
 
-
     # config o logging padrão do python
     logging.basicConfig(
         format="%(message)s",
@@ -28,11 +27,8 @@ def setup_logging():
     #config o structlog
     structlog.configure(
         processors=[
-            #nivel
             structlog.stdlib.add_log_level,
-            #timestamp em iso
             structlog.processors.TimeStamper(fmt="iso"),
-            #add nome do serviço
             structlog.contextvars.merge_contextvars,
             #stack traces em JSON
             structlog.processors.format_exc_info,
@@ -69,9 +65,8 @@ def log_estruturado(
         "lamport_clock": lamport_clock,
     }
 
-    #add campos extras se existirem
     if extras:
-            campos.update(extras)
+        campos.update(extras)
 
     campos = {k: v for k, v in campos.items() if v is not None}
 

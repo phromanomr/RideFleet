@@ -9,7 +9,6 @@ import os
 
 router = APIRouter(tags=["Health"])
 
-
 @router.get("/health")
 async def health_check(request: Request):
     # 1. Motoristas disponíveis no banco
@@ -51,24 +50,20 @@ async def health_check(request: Request):
     # Atualiza os gauges do Prometheus com os valores atuais
     metrics.atualizar_fila(tamanho_fila)
     metrics.atualizar_motoristas(motoristas_disponiveis)
+
     latencia_media = metrics.calcular_latencia_media()
     taxa_erro = metrics.calcular_taxa_erro()
 
-    # 4. Alertas e status geral
+    # 3. Alertas e status geral
     alertas = []
-
     if rabbitmq_status != "ok":
         alertas.append(f"RabbitMQ indisponível: {rabbitmq_status}")
-
     if db_status != "ok":
         alertas.append(f"Banco de dados indisponível: {db_status}")
-
     if tamanho_fila > 10:
         alertas.append("Fila de corridas acima do limite (>10)")
-
     if taxa_erro > 0.3:
         alertas.append("Taxa de erro elevada (>30%)")
-
     if motoristas_disponiveis == 0:
         alertas.append("Nenhum motorista disponível")
 
@@ -81,7 +76,6 @@ async def health_check(request: Request):
         status = "UP"
 
     instance_id = os.getenv("INSTANCE_ID", "unknown")
-
     return {
         "instance_id": instance_id,
         "status": status,
