@@ -5,6 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.models.driver_model import DriverModel
+from app.models.ride_model import RideModel
+
 
 async def criar_motorista(name: str, licence_plate: str, db: AsyncSession) -> DriverModel | None:
     motorista = DriverModel(
@@ -53,4 +55,36 @@ async def contar_motoristas(db: AsyncSession) -> dict:
         "total": total,
         "available": disponiveis,
         "busy": total - disponiveis
+    }
+
+async def listar_corridas_por_motorista(driver_id: str, db: AsyncSession) -> list[RideModel]:
+    result = await db.execute(select(RideModel).where(RideModel.driver_id == driver_id))
+    return result.scalars().all()
+
+def ride_to_response(ride_model: RideModel) -> dict:
+    """Converte um RideModel para um dicionário compatível com RideResponse."""
+    return {
+        "id": ride_model.id,
+        "status": ride_model.status,
+        "passenger_id": ride_model.passenger_id,
+        "driver_id": ride_model.driver_id,
+        "valor": ride_model.valor,
+        "delegated_to": ride_model.delegated_to,
+        "lamport_clock": ride_model.lamport_clock,
+        "origin": {
+            "lat": ride_model.origin_lat,
+            "lng": ride_model.origin_lng,
+            "street": ride_model.origin_street,
+            "number": ride_model.origin_number,
+            "city": ride_model.origin_city,
+            "state": ride_model.origin_state
+        },
+        "destination": {
+            "lat": ride_model.destination_lat,
+            "lng": ride_model.destination_lng,
+            "street": ride_model.destination_street,
+            "number": ride_model.destination_number,
+            "city": ride_model.destination_city,
+            "state": ride_model.destination_state
+        }
     }

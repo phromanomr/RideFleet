@@ -219,3 +219,61 @@ async def atualizar_corrida(corrida: Ride) -> None:
             ride_db.driver_id = corrida.driver_id
             ride_db.lamport_clock = corrida.lamport_clock
             await db.commit()
+
+async def buscar_status_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
+    """Busca o status de uma corrida pelo id no banco. Usado para o endpoint de consulta de status."""
+    result = await db.execute(select(RideModel.status).where(RideModel.id == ride_id))
+    status = result.scalar_one_or_none()
+    return status
+
+async def listar_corridas(db: AsyncSession, status: str | None = None) -> list[RideModel]:
+    """
+    Retorna todas as corridas. Não aceita mais `passenger_id` — o endpoint retorna
+    todas as corridas opcionamente filtradas por `status`.
+    """
+    q = select(RideModel)
+    if status:
+        # converte string para enum se precisar
+        try:
+            q = q.where(RideModel.status == RideStatus(status))
+            log_estruturado("filtro_status_aplicado", extras={"status": status})
+        except Exception:
+            # se o status for invalido, retorna vazio
+            log_estruturado("filtro_status_invalido", nivel="WARN", extras={"status": status})
+            return []
+    result = await db.execute(q)
+    return result.scalars().all()
+
+async def listar_corridas_em_andamento(db: AsyncSession) -> list[RideModel]:
+    in_progress = [RideStatus.MATCH, RideStatus.CONFIRM, RideStatus.IN_TRANSIT]
+    q = select(RideModel).where(RideModel.status.in_(in_progress))
+    result = await db.execute(q)
+    return result.scalars().all()
+
+def ride_to_response(ride_model: RideModel) -> dict:
+    """Converte um RideModel para um dicionário compatível com RideResponse."""
+    return {
+        "id": ride_model.id,
+        "status": ride_model.status,
+        "passenger_id": ride_model.passenger_id,
+        "driver_id": ride_model.driver_id,
+        "valor": ride_model.valor,
+        "delegated_to": ride_model.delegated_to,
+        "lamport_clock": ride_model.lamport_clock,
+        "origin": {
+            "lat": ride_model.origin_lat,
+            "lng": ride_model.origin_lng,
+            "street": ride_model.origin_street,
+            "number": ride_model.origin_number,
+            "city": ride_model.origin_city,
+            "state": ride_model.origin_state
+        },
+        "destination": {
+            "lat": ride_model.destination_lat,
+            "lng": ride_model.destination_lng,
+            "street": ride_model.destination_street,
+            "number": ride_model.destination_number,
+            "city": ride_model.destination_city,
+            "state": ride_model.destination_state
+        }
+    }
