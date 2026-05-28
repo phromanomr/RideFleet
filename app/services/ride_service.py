@@ -85,16 +85,19 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         tamanho_fila = await obter_tamanho_fila()
 
     if await tem_motorista_disponivel() and tamanho_fila == 0:
+        log_estruturado("motorista_disponível", corrida_id=corrida.id, estado_novo="match")
         await _atribuir_motorista(corrida)
     elif tamanho_fila < MAX_QUEUE_SIZE:
-        # Se a fila local tem espaço manda pra lá
+        log_estruturado("corrida_enfileirada", corrida_id=corrida.id,
+                        extras={"queue_size": tamanho_fila + 1})
         await publicar_corrida_entrada(corrida_dict)
         await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
     else:
-        # Se overflow atingido manda para a fila do leilão
+        log_estruturado("overflow_delegado_ao_core", corrida_id=corrida.id,
+                        nivel="WARN", extras={"queue_size": tamanho_fila})
         await publicar_corrida_saida(corrida_dict)
         await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
-        
+
     return corrida
 
 
