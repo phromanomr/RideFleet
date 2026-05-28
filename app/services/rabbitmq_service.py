@@ -1,6 +1,7 @@
 import json
 import asyncio
 import aio_pika
+import httpx
 from aio_pika.abc import AbstractRobustConnection, AbstractIncomingMessage
 from app.config import RABBITMQ_URL
 from app.logging_config import get_logger
@@ -89,8 +90,27 @@ async def consumir_fila_entrada(callback):
     logger.info("rabbitmq_consumer_started", queue=QUEUE_ENTRADA)
 
 async def obter_tamanho_fila() -> int:
-    """Útil para o endpoint de health check e para a política de overflow."""
-    if not channel:
-        return 0
-    queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
-    return queue.declaration_result.message_count
+    """Pega o tamanho TOTAL da fila consultando a API REST do RabbitMQ."""
+    # A URL usa a porta 15672 (Painel) e o vhost padrão '/' (codificado como %2F)
+    api_url = "http://rabbitmq:15672/api/queues/%2F/fila_entrada_corridas"
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            # Usando as credenciais definidas no seu docker-compose.yml
+            response = await client.get(api_url, auth=("myuser", "mypassword"))
+            
+            if response.status_code == 200:
+                data = response.json()
+                # A chave "messages" contém a soma de Ready + Unacked
+                total_mensagens = data.get("messages", 0)
+                return total_mensagens
+                
+    except Exception as e:
+        logger.error("erro_ao_consultar_api_rabbitmq", error=str(e))
+        
+    # Fallback de segurança: se a requisição HTTP falhar, usa o método antigo
+    if channel:
+        queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
+        return queue.declaration_result.message_count
+    
+    return 0

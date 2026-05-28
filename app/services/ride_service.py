@@ -19,6 +19,8 @@ from app.config import (
     DELAY_IN_TRANSIT_TO_COMPLETED,
 )
 
+# Lock global de verificação de tamanho de fila. Isso evita que o limite da fila interna seja ultrapassado
+request_lock = asyncio.Lock()
 
 async def _buscar_motorista_disponivel() -> DriverModel | None:
     """Busca um motorista disponível no banco."""
@@ -62,8 +64,6 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
     metrics.registrar_inicio_corrida(corrida.id)
     
-    tamanho_fila = await obter_tamanho_fila()
-    
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
         "id": corrida.id,
@@ -77,17 +77,22 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         "lamport_clock": corrida.lamport_clock,
     }
 
-    if await tem_motorista_disponivel() and tamanho_fila == 0:
-        await _atribuir_motorista(corrida)
-    elif tamanho_fila < MAX_QUEUE_SIZE:
-        # Se a fila local tem espaço manda pra lá
-        await publicar_corrida_entrada(corrida_dict)
-        await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
-    else:
-        # Se overflow atingido manda para a fila do leilão
-        await publicar_corrida_saida(corrida_dict)
-        await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
-        
+    # Verifica/Atribui o lock a uma solicitação de corrida
+    async with request_lock:
+        tamanho_fila = await obter_tamanho_fila()
+
+        if await tem_motorista_disponivel() and tamanho_fila == 0:
+            await _atribuir_motorista(corrida)
+        elif tamanho_fila < MAX_QUEUE_SIZE: 
+            print("tamanho fila: ", tamanho_fila)
+            # Se a fila local tem espaço manda pra lá
+            await publicar_corrida_entrada(corrida_dict)
+            await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
+        else:
+            # Se overflow atingido manda para a fila do leilão
+            await publicar_corrida_saida(corrida_dict)
+            await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
+            
     return corrida
 
 
