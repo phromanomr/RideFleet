@@ -14,3 +14,4 @@ python-dotenv==1.0.0
 structlog==24.4.0
 PyYAML==6.0.3
 aio_pika==9.6.2
+prometheus-client==0.25.0

@@ -1,5 +1,38 @@
 services:
 
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - vrumvrum-net
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards
+    depends_on:
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - vrumvrum-net
+
   nginx:
     image: nginx:alpine
     restart: always
@@ -8,8 +41,10 @@ services:
     volumes:
       - ./infra/nginx/nginx.conf:/etc/nginx/conf.d/default.conf
     depends_on:
-      - api_1
-      - api_2
+      api_1:
+        condition: service_healthy
+      api_2:
+        condition: service_healthy
     networks:
       - vrumvrum-net
 
@@ -21,9 +56,18 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
       INSTANCE_ID: api_1
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
+      LOKI_URL: http://loki:3100
     depends_on:
-      - rabbitmq
-      - db
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -41,9 +85,24 @@ services:
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
       INSTANCE_ID: api_2
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
+      LOKI_URL: http://loki:3100
     depends_on:
-      - rabbitmq
-      - db
+      rabbitmq:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     networks:
       - vrumvrum-net
 
@@ -79,18 +138,35 @@ services:
         - RABBITMQ_DEFAULT_USER=myuser
         - RABBITMQ_DEFAULT_PASS=mypassword
       healthcheck:
-        # Este comando é mais seguro para o RabbitMQ
-        test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_support", "5672"]
-        interval: 5s
-        timeout: 5s
-        retries: 5
-        start_period: 10s
+          test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+          interval: 10s
+          timeout: 10s
+          retries: 5
+          start_period: 30s
       networks:
         - vrumvrum-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - vrumvrum-net
+
 
 volumes:
   pgdata:
   rabbitmq_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   vrumvrum-net:

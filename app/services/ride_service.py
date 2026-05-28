@@ -18,6 +18,8 @@ from app.config import (
     DELAY_CONFIRMED_TO_IN_TRANSIT,
     DELAY_IN_TRANSIT_TO_COMPLETED,
 )
+from app.logging_config import log_estruturado, get_logger
+logger = get_logger()
 
 # Lock global de verificação de tamanho de fila. Isso evita que o limite da fila interna seja ultrapassado
 request_lock = asyncio.Lock()
@@ -63,7 +65,8 @@ async def _liberar_motorista(driver_id: str):
 async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
     metrics.registrar_inicio_corrida(corrida.id)
-    
+    tamanho_fila = await obter_tamanho_fila()
+
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
         "id": corrida.id,
@@ -81,18 +84,17 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     async with request_lock:
         tamanho_fila = await obter_tamanho_fila()
 
-        if await tem_motorista_disponivel() and tamanho_fila == 0:
-            await _atribuir_motorista(corrida)
-        elif tamanho_fila < MAX_QUEUE_SIZE: 
-            print("tamanho fila: ", tamanho_fila)
-            # Se a fila local tem espaço manda pra lá
-            await publicar_corrida_entrada(corrida_dict)
-            await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
-        else:
-            # Se overflow atingido manda para a fila do leilão
-            await publicar_corrida_saida(corrida_dict)
-            await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
-            
+    if await tem_motorista_disponivel() and tamanho_fila == 0:
+        await _atribuir_motorista(corrida)
+    elif tamanho_fila < MAX_QUEUE_SIZE:
+        # Se a fila local tem espaço manda pra lá
+        await publicar_corrida_entrada(corrida_dict)
+        await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
+    else:
+        # Se overflow atingido manda para a fila do leilão
+        await publicar_corrida_saida(corrida_dict)
+        await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
+        
     return corrida
 
 
@@ -101,8 +103,8 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
     Worker chamado pelo consumidor do RabbitMQ na fila de entrada.
     """
     if not await tem_motorista_disponivel():
-        return False 
-        
+        return False
+
     # Recria o objeto dataclass Ride
     corrida = Ride(
         id=corrida_dict["id"],
@@ -115,7 +117,7 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
         delegated_to=corrida_dict.get("delegated_to"),
         lamport_clock=corrida_dict.get("lamport_clock", 0)
     )
-    
+
     sucesso = await _atribuir_motorista(corrida)
     return sucesso
 
@@ -123,11 +125,15 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
 async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()
     if not motorista:
+        log_estruturado("motorista_nao_encontrado", corrida_id=corrida.id, nivel="WARN")
         return False
-        
+
     await _ocupar_motorista(motorista.id)
     corrida.status = RideStatus.MATCH
     corrida.driver_id = motorista.id
+    log_estruturado("motorista_atribuido", corrida_id=corrida.id,
+                    estado_anterior="request", estado_novo="match",
+                    extras={"driver_id": motorista.id})
     await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
     await atualizar_corrida(corrida)
     asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
@@ -139,18 +145,27 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
     await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
     corrida.status = RideStatus.CONFIRM
     await atualizar_corrida(corrida)
+    log_estruturado("corrida_confirmada", corrida_id=corrida.id,
+                    estado_anterior="match", estado_novo="confirm",
+                    extras={"driver_id": driver_id})
     await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
 
     await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
     corrida.status = RideStatus.IN_TRANSIT
     await atualizar_corrida(corrida)
+    log_estruturado("corrida_em_transito", corrida_id=corrida.id,
+                    estado_anterior="confirm", estado_novo="in_transit",
+                    extras={"driver_id": driver_id})
     await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
 
     await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
     corrida.status = RideStatus.COMPLETE
     await atualizar_corrida(corrida)
+    log_estruturado("corrida_concluida", corrida_id=corrida.id,
+                    estado_anterior="in_transit", estado_novo="complete",
+                    extras={"driver_id": driver_id})
     await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
-    
+
     # Atualiza métricas de monitoramento
     metrics.registrar_fim_corrida(corrida.id)
     metrics.registrar_sucesso()
@@ -207,3 +222,61 @@ async def atualizar_corrida(corrida: Ride) -> None:
             ride_db.driver_id = corrida.driver_id
             ride_db.lamport_clock = corrida.lamport_clock
             await db.commit()
+
+async def buscar_status_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
+    """Busca o status de uma corrida pelo id no banco. Usado para o endpoint de consulta de status."""
+    result = await db.execute(select(RideModel.status).where(RideModel.id == ride_id))
+    status = result.scalar_one_or_none()
+    return status
+
+async def listar_corridas(db: AsyncSession, status: str | None = None) -> list[RideModel]:
+    """
+    Retorna todas as corridas. Não aceita mais `passenger_id` — o endpoint retorna
+    todas as corridas opcionamente filtradas por `status`.
+    """
+    q = select(RideModel)
+    if status:
+        # converte string para enum se precisar
+        try:
+            q = q.where(RideModel.status == RideStatus(status))
+            log_estruturado("filtro_status_aplicado", extras={"status": status})
+        except Exception:
+            # se o status for invalido, retorna vazio
+            log_estruturado("filtro_status_invalido", nivel="WARN", extras={"status": status})
+            return []
+    result = await db.execute(q)
+    return result.scalars().all()
+
+async def listar_corridas_em_andamento(db: AsyncSession) -> list[RideModel]:
+    in_progress = [RideStatus.MATCH, RideStatus.CONFIRM, RideStatus.IN_TRANSIT]
+    q = select(RideModel).where(RideModel.status.in_(in_progress))
+    result = await db.execute(q)
+    return result.scalars().all()
+
+def ride_to_response(ride_model: RideModel) -> dict:
+    """Converte um RideModel para um dicionário compatível com RideResponse."""
+    return {
+        "id": ride_model.id,
+        "status": ride_model.status,
+        "passenger_id": ride_model.passenger_id,
+        "driver_id": ride_model.driver_id,
+        "valor": ride_model.valor,
+        "delegated_to": ride_model.delegated_to,
+        "lamport_clock": ride_model.lamport_clock,
+        "origin": {
+            "lat": ride_model.origin_lat,
+            "lng": ride_model.origin_lng,
+            "street": ride_model.origin_street,
+            "number": ride_model.origin_number,
+            "city": ride_model.origin_city,
+            "state": ride_model.origin_state
+        },
+        "destination": {
+            "lat": ride_model.destination_lat,
+            "lng": ride_model.destination_lng,
+            "street": ride_model.destination_street,
+            "number": ride_model.destination_number,
+            "city": ride_model.destination_city,
+            "state": ride_model.destination_state
+        }
+    }
