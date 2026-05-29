@@ -2,7 +2,7 @@ import json
 import asyncio
 import aio_pika
 from aio_pika.abc import AbstractRobustConnection, AbstractIncomingMessage
-from app.config import RABBITMQ_URL
+from app.config import RABBITMQ_URL, TTL_QUEUE
 from app.logging_config import get_logger
 
 logger = get_logger()
@@ -29,8 +29,20 @@ async def init_rabbitmq():
         # Declara as filas e salva referência em _queues.
         # Isso evita re-declarações posteriores no mesmo channel,
         # o que causaria conflito quando o consumer já estiver ativo.
-        _queues[QUEUE_ENTRADA] = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
-        _queues[QUEUE_SAIDA] = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+        _queues[QUEUE_ENTRADA] = await channel.declare_queue(
+            QUEUE_ENTRADA, 
+            durable=True,
+            arguments={
+                "x-message-ttl": TTL_QUEUE
+            }
+        )
+        _queues[QUEUE_SAIDA] = await channel.declare_queue(
+            QUEUE_SAIDA, 
+            durable=True,
+            arguments={
+                "x-message-ttl": TTL_QUEUE
+            }
+        )
 
         logger.info("rabbitmq_connected", url=RABBITMQ_URL)
     except Exception as e:
@@ -120,5 +132,34 @@ async def obter_tamanho_fila() -> int:
                 await temp_channel.close()
         return 0
     except Exception as e:
+        logger.error("erro_ao_consultar_api_rabbitmq", error=str(e))
+        
+    # Fallback de segurança: se a requisição HTTP falhar, usa o método antigo
+    if channel:
+        queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
+        return queue.declaration_result.message_count
+    
+    return 0
+
+async def consumir_fila_saida(callback):
+    """Fica escutando mensagens na fila de saída e delega ao Core."""
+    if not channel:
+        return
+    queue = _queues.get(QUEUE_SAIDA)
+    if not queue:
+        queue = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+        _queues[QUEUE_SAIDA] = queue
+
+    async def process_message(message: AbstractIncomingMessage):
+        corrida_dict = json.loads(message.body.decode())
+        sucesso = await callback(corrida_dict)
+        if sucesso:
+            await message.ack()
+        else:
+            await asyncio.sleep(2)
+            await message.nack(requeue=True)
+
+    await queue.consume(process_message)
+    logger.info("rabbitmq_consumer_started", queue=QUEUE_SAIDA)
         logger.warning("obter_tamanho_fila_erro", error=str(e))
         return 0

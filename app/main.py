@@ -4,9 +4,9 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import structlog
-from app.routers import rides, audit, drivers, health
+from app.routers import rides, audit, drivers, health, core
 from app.logging_config import setup_logging, get_logger
-from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada
+from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada, consumir_fila_saida
 
 # configura o logging ao iniciar
 setup_logging()
@@ -20,8 +20,9 @@ async def lifespan(app: FastAPI):
 
     # Registra o worker que vai processar as mensagens da fila de entrada no background
     # A importação da função é feita aqui dentro para evitar problemas de importação circular
-    from app.services.ride_service import processar_corrida_da_fila
+    from app.services.ride_service import processar_corrida_da_fila, processar_corrida_saida
     await consumir_fila_entrada(processar_corrida_da_fila)
+    await consumir_fila_saida(processar_corrida_saida)
     yield
     await close_rabbitmq()
     # exe ao encerrar
@@ -48,6 +49,7 @@ app.include_router(rides.router)
 app.include_router(audit.router)
 app.include_router(drivers.router)
 app.include_router(health.router)
+app.include_router(core.router)
 
 # ---------------------------------------------------------------------------
 # Endpoint /metrics — formato Prometheus (texto puro)

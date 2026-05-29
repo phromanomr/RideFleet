@@ -3,7 +3,7 @@ services:
   loki:
     image: grafana/loki:2.9.0
     ports:
-      - "3100:3100"
+      - "3109:3100"
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - vrumvrum-net
@@ -12,7 +12,7 @@ services:
     image: grafana/grafana:latest
     restart: always
     ports:
-      - "3000:3000"
+      - "3009:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
@@ -114,7 +114,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: vrumvrum
     ports:
-      - "5432:5432"
+      - "5439:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -129,8 +129,8 @@ services:
       image: rabbitmq:3.9.4-management
       container_name: ridefleet-rabbitmq-1
       ports:
-        - "5672:5672"
-        - "15672:15672"
+        - "5679:5672"
+        - "15679:15672"
       volumes:
         - rabbitmq_data:/var/lib/rabbitmq
       environment:
@@ -156,7 +156,7 @@ services:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "9099:9090"
     networks:
       - vrumvrum-net
 
