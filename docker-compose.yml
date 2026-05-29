@@ -128,7 +128,6 @@ services:
   rabbitmq:
       image: rabbitmq:3.9.4-management
       container_name: ridefleet-rabbitmq-1
-      hostname: rabbitmq-server
       ports:
         - "5672:5672"
         - "15672:15672"
