@@ -3,7 +3,7 @@ import asyncio
 import aio_pika
 import httpx
 from aio_pika.abc import AbstractRobustConnection, AbstractIncomingMessage
-from app.config import RABBITMQ_URL
+from app.config import RABBITMQ_URL, TTL_QUEUE
 from app.logging_config import get_logger
 
 logger = get_logger()
@@ -30,8 +30,20 @@ async def init_rabbitmq():
         # Declara as filas e salva referência em _queues.
         # Isso evita re-declarações posteriores no mesmo channel,
         # o que causaria conflito quando o consumer já estiver ativo.
-        _queues[QUEUE_ENTRADA] = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
-        _queues[QUEUE_SAIDA] = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+        _queues[QUEUE_ENTRADA] = await channel.declare_queue(
+            QUEUE_ENTRADA, 
+            durable=True,
+            arguments={
+                "x-message-ttl": TTL_QUEUE
+            }
+        )
+        _queues[QUEUE_SAIDA] = await channel.declare_queue(
+            QUEUE_SAIDA, 
+            durable=True,
+            arguments={
+                "x-message-ttl": TTL_QUEUE
+            }
+        )
 
         logger.info("rabbitmq_connected", url=RABBITMQ_URL)
     except Exception as e:

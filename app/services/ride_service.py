@@ -4,6 +4,7 @@ import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.distributed.logical_clock import lamport
 from app.models.ride_model import RideModel
 from app.models.ride import Ride, RideStatus
 from app.models.location import Location
@@ -12,6 +13,7 @@ from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
 from app import metrics
 from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
+from app.services.core_service import solicitar_delegacao_core
 from app.config import (
     MAX_QUEUE_SIZE,
     DELAY_MATCH_TO_CONFIRM,
