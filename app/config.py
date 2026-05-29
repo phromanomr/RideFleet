@@ -14,6 +14,7 @@ DELAY_IN_TRANSIT_TO_COMPLETED = 30
 # --- Integração com o Core ---
 CORE_URL = "http://core:8080/api/v1"
 ORIGIN_SERVICE_ID = "vrumvrum"
+ORIGIN_API_KEY = ""
 AUCTION_TIMEOUT_SECONDS = 10
 
 RABBITMQ_URL = "amqp://myuser:mypassword@rabbitmq:5672/"
