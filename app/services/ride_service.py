@@ -124,6 +124,14 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
     sucesso = await _atribuir_motorista(corrida)
     return sucesso
 
+async def processar_corrida_saida(corrida_dict: dict) -> bool:
+    try:
+        clock = await lamport.tick()
+        await solicitar_delegacao_core(corrida_dict, clock)
+        return True
+    except Exception as e:
+        logger.error("erro_ao_delegar_ao_core", erro=str(e))
+        return False
 
 async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()
