@@ -119,3 +119,24 @@ async def obter_tamanho_fila() -> int:
         return queue.declaration_result.message_count
     
     return 0
+
+async def consumir_fila_saida(callback):
+    """Fica escutando mensagens na fila de saída e delega ao Core."""
+    if not channel:
+        return
+    queue = _queues.get(QUEUE_SAIDA)
+    if not queue:
+        queue = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+        _queues[QUEUE_SAIDA] = queue
+
+    async def process_message(message: AbstractIncomingMessage):
+        corrida_dict = json.loads(message.body.decode())
+        sucesso = await callback(corrida_dict)
+        if sucesso:
+            await message.ack()
+        else:
+            await asyncio.sleep(2)
+            await message.nack(requeue=True)
+
+    await queue.consume(process_message)
+    logger.info("rabbitmq_consumer_started", queue=QUEUE_SAIDA)
