@@ -23,6 +23,8 @@ from app.config import (
 from app.logging_config import log_estruturado, get_logger
 logger = get_logger()
 
+# Lock global de verificação de tamanho de fila. Isso evita que o limite da fila interna seja ultrapassado
+request_lock = asyncio.Lock()
 
 async def _buscar_motorista_disponivel() -> DriverModel | None:
     """Busca um motorista disponível no banco."""
@@ -79,6 +81,10 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         "delegated_to": corrida.delegated_to,
         "lamport_clock": corrida.lamport_clock,
     }
+
+    # Verifica/Atribui o lock a uma solicitação de corrida
+    async with request_lock:
+        tamanho_fila = await obter_tamanho_fila()
 
     if await tem_motorista_disponivel() and tamanho_fila == 0:
         log_estruturado("motorista_disponível", corrida_id=corrida.id, estado_novo="match")
