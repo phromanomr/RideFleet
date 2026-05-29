@@ -1,7 +1,6 @@
 import json
 import asyncio
 import aio_pika
-import httpx
 from aio_pika.abc import AbstractRobustConnection, AbstractIncomingMessage
 from app.config import RABBITMQ_URL, TTL_QUEUE
 from app.logging_config import get_logger
@@ -107,21 +106,31 @@ async def consumir_fila_entrada(callback):
 
 
 async def obter_tamanho_fila() -> int:
-    """Pega o tamanho TOTAL da fila consultando a API REST do RabbitMQ."""
-    # A URL usa a porta 15672 (Painel) e o vhost padrão '/' (codificado como %2F)
-    api_url = "http://rabbitmq:15672/api/queues/%2F/fila_entrada_corridas"
-    
+    """
+    Retorna o número de mensagens pendentes na fila de entrada.
+
+    Por que channel temporário com passive=True?
+    O channel principal já tem um consumer ativo (consumir_fila_entrada).
+    Re-declarar uma fila no mesmo channel que está sendo consumido causa
+    conflito no aio_pika e pode lançar exceção ou retornar contagem errada.
+    A solução é abrir um channel temporário só para inspecionar (passive=True
+    garante que nenhuma fila é criada/alterada) e fechá-lo logo em seguida.
+    """
+    if not channel:
+        return 0
     try:
-        async with httpx.AsyncClient() as client:
-            # Usando as credenciais definidas no seu docker-compose.yml
-            response = await client.get(api_url, auth=("myuser", "mypassword"))
-            
-            if response.status_code == 200:
-                data = response.json()
-                # A chave "messages" contém a soma de Ready + Unacked
-                total_mensagens = data.get("messages", 0)
-                return total_mensagens
-                
+        queue = _queues.get(QUEUE_ENTRADA)
+        if queue:
+            temp_channel = await connection.channel()
+            try:
+                # passive=True: só lê o estado da fila, sem criar nem modificar
+                temp_queue = await temp_channel.declare_queue(
+                    QUEUE_ENTRADA, durable=True, passive=True
+                )
+                return temp_queue.declaration_result.message_count
+            finally:
+                await temp_channel.close()
+        return 0
     except Exception as e:
         logger.error("erro_ao_consultar_api_rabbitmq", error=str(e))
         
@@ -152,3 +161,5 @@ async def consumir_fila_saida(callback):
 
     await queue.consume(process_message)
     logger.info("rabbitmq_consumer_started", queue=QUEUE_SAIDA)
+        logger.warning("obter_tamanho_fila_erro", error=str(e))
+        return 0
