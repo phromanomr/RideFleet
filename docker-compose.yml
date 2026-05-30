@@ -57,6 +57,7 @@ services:
       INSTANCE_ID: api_1
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
       LOKI_URL: http://loki:3100
+      ORS_API_KEY: ${ORS_API_KEY}
     depends_on:
       rabbitmq:
         condition: service_healthy
@@ -86,6 +87,7 @@ services:
       INSTANCE_ID: api_2
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
       LOKI_URL: http://loki:3100
+      ORS_API_KEY: ${ORS_API_KEY}
     depends_on:
       rabbitmq:
         condition: service_healthy
