@@ -293,3 +293,35 @@ def ride_to_response(ride_model: RideModel) -> dict:
             "state": ride_model.destination_state
         }
     }
+
+async def receber_corrida_delegada(
+    ride_uuid: str,
+    origin: dict,
+    destination: dict,
+    passenger_id: str,
+    origin_service_id: str,
+    lamport_clock: int,
+    db: AsyncSession
+) -> Ride:
+    """
+    Processa uma corrida recebida por delegação do Core.
+    Cria a corrida no banco, atribui motorista e inicia a simulação.
+    """
+    corrida = Ride(
+        id=ride_uuid,
+        origin=Location(**origin),
+        destination=Location(**destination),
+        passenger_id=passenger_id,
+        status=RideStatus.MATCH,
+        delegated_to=origin_service_id,
+        lamport_clock=lamport_clock,
+    )
+
+    await salvar_corrida(corrida, db)
+    await log_event(ride_uuid, "ride_received_from_core", {
+        "origin_service": origin_service_id
+    })
+
+    asyncio.ensure_future(_atribuir_motorista(corrida))
+
+    return corrida
