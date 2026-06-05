@@ -1,11 +1,19 @@
 from fastapi import APIRouter, Response, Depends
+
+from app.database import get_db
 from app.models.core_schemas import RideAuctionNotification, ProposalResponse, RideAssignment
-from app.services.geo_service import calcular_rota, calcular_preco
-from app.services.ride_service import tem_motorista_disponivel
+
+from app.models.location import Location
+from app.models.ride import Ride, RideStatus
+from app.services.ride_service import tem_motorista_disponivel, salvar_corrida, receber_corrida_delegada
+
 from app.services.core_service import atualizar_status
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.distributed.logical_clock import lamport
 from app.logging_config import get_logger
+
+
 
 logger = get_logger()
 
@@ -47,16 +55,27 @@ async def receber_notificacao_leilao(notificacao: RideAuctionNotification):
     )
 
 @router.post("/rides/{ride_uuid}/assigned")
-async def receber_atribuicao(ride_uuid: str, atribuicao: RideAssignment):
-    """Confirmação de aceite, vitoria da corrida e recebimento do lock"""
-    
+async def receber_atribuicao(
+    ride_uuid: str,
+    atribuicao: RideAssignment,
+    db: AsyncSession = Depends(get_db)
+):
     relogio_sincronizado = await lamport.receive(atribuicao.logicalTimestamp)
-    
+
     try:
-        # Enviar o status com o relógio atualizado
+        await receber_corrida_delegada(
+            ride_uuid=ride_uuid,
+            origin=atribuicao.origin,
+            destination=atribuicao.destination,
+            passenger_id=atribuicao.passengerId,
+            origin_service_id=atribuicao.originServiceId,
+            lamport_clock=relogio_sincronizado,
+            db=db,
+        )
         await atualizar_status(ride_uuid, "confirm", relogio_sincronizado)
-        logger.info("corrida_confirmada_com_sucesso", ride_uuid=ride_uuid)
+        logger.info("corrida_recebida_e_confirmada", ride_uuid=ride_uuid)
         return {"status": "accepted"}
+
     except Exception as e:
         logger.error("erro_ao_confirmar_atribuicao", ride_uuid=ride_uuid, erro=str(e))
         return Response(status_code=500)
