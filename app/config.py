@@ -1,4 +1,5 @@
 # app/config.py
+import os
 
 # --- Frota simulada ---
 MAX_DRIVERS = 1          # total de motoristas disponíveis simultaneamente
@@ -24,3 +25,8 @@ AUCTION_TIMEOUT_SECONDS = 10
 RABBITMQ_URL = "amqp://myuser:mypassword@rabbitmq:5672/"
 
 TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5439/vrumvrum_test"
+
+# --- Geolocalização ---
+ORS_API_KEY = os.getenv("ORS_API_KEY", "")
+PRECO_BASE = 5.00
+PRECO_POR_KM = 2.00

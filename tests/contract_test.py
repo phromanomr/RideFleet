@@ -115,19 +115,26 @@ async def test_incoming_sem_motorista_disponivel():
 # ─────────────────────────────────────────────
 
 @pytest.mark.asyncio
-async def test_assigned_retorna_accepted():
-    """Atribuição válida deve retornar 200 com status accepted."""
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
-    ) as ac:
-        response = await ac.post(
-            f"/rides/{ASSIGNED_PAYLOAD['rideUuid']}/assigned",
-            json=ASSIGNED_PAYLOAD
-        )
+async def test_incoming_com_motorista_disponivel():
+    """Com motorista disponível deve retornar 200 com proposta válida."""
+    with patch("app.routers.core.tem_motorista_disponivel", new_callable=AsyncMock, return_value=True), \
+         patch("app.routers.core.calcular_rota", new_callable=AsyncMock, return_value={
+             "distancia_km": 10.5,
+             "duracao_s": 900
+         }):
+        async with AsyncClient(
+            transport=ASGITransport(app=app),
+            base_url="http://test"
+        ) as ac:
+            response = await ac.post("/rides/incoming", json=INCOMING_PAYLOAD)
 
     assert response.status_code == 200
-    assert response.json() == {"status": "accepted"}
+    body = response.json()
+    assert "estimatedEta" in body
+    assert "estimatedPrice" in body
+    assert "logicalTimestamp" in body
+    assert body["estimatedEta"] == 900
+    assert body["estimatedPrice"] == round(5.00 + 2.00 * 10.5, 2)
 
 
 @pytest.mark.asyncio

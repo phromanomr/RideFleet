@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Response, Depends
 from app.models.core_schemas import RideAuctionNotification, ProposalResponse, RideAssignment
+from app.services.geo_service import calcular_rota, calcular_preco
 from app.services.ride_service import tem_motorista_disponivel
 from app.services.core_service import atualizar_status
 
@@ -14,21 +15,35 @@ router = APIRouter(tags=["Webhooks do Core"])
 async def receber_notificacao_leilao(notificacao: RideAuctionNotification):
     """Recebimento de proposta (enviar aceitamento ou não aceitamento da corrida)"""
 
-    # Sincronizar o relógio
     relogio_sincronizado = await lamport.receive(notificacao.logicalTimestamp)
-    
+
     tem_motorista = await tem_motorista_disponivel()
-    
+
     if not tem_motorista:
         logger.info("leilao_recusado_sem_motoristas", ride_uuid=notificacao.rideUuid)
         return Response(status_code=204)
-    
-    logger.info("proposta_enviada_leilao", ride_uuid=notificacao.rideUuid)
-        
+
+    # Calcula rota real via OpenRouteService
+    rota = await calcular_rota(notificacao.origin, notificacao.destination)
+
+    if rota is None:
+        # Fallback: se a geo falhar, usa valores padrão
+        logger.warning("geo_falhou_usando_fallback", ride_uuid=notificacao.rideUuid)
+        eta = 120
+        preco = 20.00
+    else:
+        eta = rota["duracao_s"]
+        preco = calcular_preco(rota["distancia_km"])
+
+    logger.info("proposta_enviada_leilao",
+                ride_uuid=notificacao.rideUuid,
+                eta=eta,
+                preco=preco)
+
     return ProposalResponse(
-        estimatedEta=120,          
-        estimatedPrice=20.00,      
-        logicalTimestamp=relogio_sincronizado # Relógio matematicamente correto!
+        estimatedEta=eta,
+        estimatedPrice=preco,
+        logicalTimestamp=relogio_sincronizado
     )
 
 @router.post("/rides/{ride_uuid}/assigned")

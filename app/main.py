@@ -7,6 +7,7 @@ import structlog
 from app.routers import rides, audit, drivers, health, core
 from app.logging_config import setup_logging, get_logger
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada, consumir_fila_saida
+from fastapi.middleware.cors import CORSMiddleware
 
 # configura o logging ao iniciar
 setup_logging()
@@ -33,6 +34,13 @@ app = FastAPI(
     description="Serviço de transporte distribuído - SIN 142 UFV-CRP 2026/1",
     version="0.1.0",
     lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.middleware("http")
