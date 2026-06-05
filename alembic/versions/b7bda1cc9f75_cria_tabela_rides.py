@@ -38,6 +38,7 @@ def upgrade() -> None:
     sa.Column('passenger_id', sa.String(length=255), nullable=False),
     sa.Column('driver_id', sa.String(length=255), nullable=True),
     sa.Column('valor', sa.Float(), nullable=True),
+    sa.Column('eta', sa.Integer(), nullable=True),
     sa.Column('delegated_to', sa.String(length=255), nullable=True),
     sa.Column('lamport_clock', sa.Integer(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), nullable=False),

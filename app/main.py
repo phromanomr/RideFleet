@@ -4,7 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import Response
 from prometheus_client import generate_latest, CONTENT_TYPE_LATEST
 import structlog
-from app.routers import rides, audit, drivers, health, core
+from app.routers import rides, audit, drivers, health, core, geo_service
 from app.logging_config import setup_logging, get_logger
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada, consumir_fila_saida
 from fastapi.middleware.cors import CORSMiddleware
@@ -58,6 +58,7 @@ app.include_router(audit.router)
 app.include_router(drivers.router)
 app.include_router(health.router)
 app.include_router(core.router)
+app.include_router(geo_service.router)
 
 # ---------------------------------------------------------------------------
 # Endpoint /metrics — formato Prometheus (texto puro)

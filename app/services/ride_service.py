@@ -14,6 +14,7 @@ from app.database import AsyncSessionLocal
 from app import metrics
 from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
 from app.services.core_service import solicitar_delegacao_core
+from app.services.geo_service import calcular_preco, calcular_rota
 from app.config import (
     MAX_QUEUE_SIZE,
     DELAY_MATCH_TO_CONFIRM,
@@ -69,6 +70,14 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     metrics.registrar_inicio_corrida(corrida.id)
     tamanho_fila = await obter_tamanho_fila()
 
+    rota = await calcular_rota(
+        {"lat": corrida.origin.lat, "lng": corrida.origin.lng}, 
+        {"lat": corrida.destination.lat, "lng": corrida.destination.lng}
+    )
+    
+    corrida.eta = rota["duracao_s"]
+    corrida.valor = calcular_preco(rota["distancia_km"])
+
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
         "id": corrida.id,
@@ -78,9 +87,12 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         "status": corrida.status.value,
         "driver_id": corrida.driver_id,
         "valor": corrida.valor,
+        "eta": corrida.eta,
         "delegated_to": corrida.delegated_to,
         "lamport_clock": corrida.lamport_clock,
     }
+
+    await atualizar_corrida(corrida)
 
     # Verifica/Atribui o lock a uma solicitação de corrida
     async with request_lock:
@@ -119,6 +131,7 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
         status=RideStatus(corrida_dict["status"]),
         driver_id=corrida_dict.get("driver_id"),
         valor=corrida_dict.get("valor"),
+        eta=corrida_dict.get("eta"),
         delegated_to=corrida_dict.get("delegated_to"),
         lamport_clock=corrida_dict.get("lamport_clock", 0)
     )
@@ -206,6 +219,7 @@ async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
         passenger_id=corrida.passenger_id,
         driver_id=corrida.driver_id,
         valor=corrida.valor,
+        eta=corrida.eta,
         delegated_to=corrida.delegated_to,
         lamport_clock=corrida.lamport_clock,
     )
@@ -233,6 +247,8 @@ async def atualizar_corrida(corrida: Ride) -> None:
         if ride_db:
             ride_db.status = corrida.status
             ride_db.driver_id = corrida.driver_id
+            ride_db.valor = corrida.valor
+            ride_db.eta = corrida.eta
             ride_db.lamport_clock = corrida.lamport_clock
             await db.commit()
 
@@ -274,6 +290,7 @@ def ride_to_response(ride_model: RideModel) -> dict:
         "passenger_id": ride_model.passenger_id,
         "driver_id": ride_model.driver_id,
         "valor": ride_model.valor,
+        "eta": ride_model.eta,
         "delegated_to": ride_model.delegated_to,
         "lamport_clock": ride_model.lamport_clock,
         "origin": {
@@ -325,3 +342,4 @@ async def receber_corrida_delegada(
     asyncio.ensure_future(_atribuir_motorista(corrida))
 
     return corrida
+
