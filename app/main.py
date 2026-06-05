@@ -7,6 +7,8 @@ import structlog
 from app.routers import rides, audit, drivers, health, core
 from app.logging_config import setup_logging, get_logger
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada, consumir_fila_saida
+from fastapi.middleware.cors import CORSMiddleware
+from app.routers.routes import router as routes_router
 
 # configura o logging ao iniciar
 setup_logging()
@@ -35,6 +37,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:8081",
+        "http://127.0.0.1:8081",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next):
     """Bind de um UUID único a cada requisição para correlação de logs."""
@@ -50,6 +63,7 @@ app.include_router(audit.router)
 app.include_router(drivers.router)
 app.include_router(health.router)
 app.include_router(core.router)
+app.include_router(routes_router)
 
 # ---------------------------------------------------------------------------
 # Endpoint /metrics — formato Prometheus (texto puro)

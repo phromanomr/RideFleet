@@ -50,3 +50,5 @@ if context.is_offline_mode():
     run_migrations_offline()
 else:
     asyncio.run(run_migrations_online())
+
+ORS_API_KEY= "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjhjNWU3YjJjOGY1OTRmZjFiM2NmZGFmODIzYTIzYjg0IiwiaCI6Im11cm11cjY0In0="
