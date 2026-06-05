@@ -75,8 +75,13 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         {"lat": corrida.destination.lat, "lng": corrida.destination.lng}
     )
     
-    corrida.eta = rota["duracao_s"]
-    corrida.valor = calcular_preco(rota["distancia_km"])
+    if rota is not None:
+        corrida.eta = int(rota["duracao_s"])
+        corrida.valor = calcular_preco(rota["distancia_km"])
+    else:
+        print("Aviso: Falha ao calcular rota. Usando valores padrão.")
+        corrida.eta = 0
+        corrida.valor = 12.50 # Ou seu PRECO_BASE
 
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
