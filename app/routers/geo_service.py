@@ -78,7 +78,12 @@ async def obter_rota(body: RouteRequest):
         data["features"][0]["geometry"]["coordinates"]
     )
 
-    # Retorna as coordenadas no formato utilizado pelo frontend
+    # Obtém resumo da rota
+    summary = data["features"][0]["properties"]["summary"]
+
+    distancia_km = round(summary["distance"] / 1000, 2)
+    duracao_s = int(summary["duration"])
+
     return {
         "coordinates": [
             {
@@ -86,5 +91,7 @@ async def obter_rota(body: RouteRequest):
                 "lng": coord[0]
             }
             for coord in coordinates
-        ]
+        ],
+        "distancia_km": distancia_km,
+        "duracao_s": duracao_s
     }

@@ -115,3 +115,47 @@ def calcular_taxa_erro() -> float:
                 sucessos = sample.value
     total = erros + sucessos
     return round(erros / total, 2) if total else 0
+
+# =====================================================
+# OBSERVABILIDADE
+# =====================================================
+
+corridas_locais_total = Counter(
+    "ridefleet_rides_local_total",
+    "Total de corridas atendidas localmente"
+)
+
+corridas_delegadas_total = Counter(
+    "ridefleet_rides_delegated_total",
+    "Total de corridas delegadas para outros grupos",
+    ["status"] 
+)
+
+corridas_recebidas_total = Counter(
+    "ridefleet_rides_received_total",
+    "Total de corridas recebidas de outros grupos"
+)
+
+requests_total = Counter(
+    "ridefleet_requests_total",
+    "Total de requisições recebidas",
+    ["endpoint"]
+)
+
+endpoint_latency = Histogram(
+    "ridefleet_endpoint_latency_seconds",
+    "Latência dos endpoints",
+    ["endpoint"]
+)
+
+def registrar_corrida_local():
+    corridas_locais_total.inc()
+
+
+def registrar_corrida_delegada(status_da_delegacao: str):
+    corridas_delegadas_total.labels(status=status_da_delegacao).inc()
+
+
+def registrar_corrida_recebida():
+    corridas_recebidas_total.inc()
+
