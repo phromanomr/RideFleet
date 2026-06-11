@@ -42,6 +42,7 @@ class RideModel(Base):
     driver_id: Mapped[str] = mapped_column(String(255), nullable=True)
 
     valor: Mapped[float] = mapped_column(Float, nullable=True)
+    eta: Mapped[int] = mapped_column(Integer, default=0)
     delegated_to: Mapped[str] = mapped_column(String(255), nullable=True)
     lamport_clock: Mapped[int] = mapped_column(Integer, default=0)
 
