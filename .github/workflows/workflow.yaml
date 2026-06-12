@@ -83,13 +83,10 @@ jobs:
       steps:
         - name: Deploy Automático via SSH
           uses: appleboy/ssh-action@v1.0.3
-          env:
-            ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
           with:
             host: ${{ secrets.SERVER_HOST }}
             username: ${{ secrets.SERVER_USER }}
             key: ${{ secrets.SERVER_SSH_KEY }}
-            envs: ORS_API_KEY
             
             script: |
               cd RideFleet
