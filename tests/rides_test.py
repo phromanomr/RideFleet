@@ -21,7 +21,7 @@ async def test_rides():
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -18.00, "lng": -17.89,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -55,7 +55,7 @@ async def test_get_ride_status():
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -18.00, "lng": -17.89,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -90,7 +90,7 @@ async def test_get_all_rides():
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -18.00, "lng": -17.89,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -104,7 +104,7 @@ async def test_get_all_rides():
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -18.00, "lng": -17.89,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
