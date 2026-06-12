@@ -187,4 +187,3 @@ def registrar_corrida_delegada(status_da_delegacao: str):
 
 def registrar_corrida_recebida():
     corridas_recebidas_total.inc()
-
