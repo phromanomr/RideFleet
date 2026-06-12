@@ -42,6 +42,7 @@ jobs:
       - name: execute unitary tests
         env:
           PYTHONPATH: .
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
         run: |
           pytest -k "not contract_test and not audit_test" -s -v
 
@@ -49,6 +50,7 @@ jobs:
       - name: execute integration tests
         env:
           PYTHONPATH: .
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
         run: |
           pytest tests/contract_test.py tests/audit_test.py -s -v
 
