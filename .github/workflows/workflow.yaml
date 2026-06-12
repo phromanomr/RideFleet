@@ -46,7 +46,7 @@ jobs:
         run: |
           pytest -k "not contract_test and not audit_test" -s -v
 
-       # Execução dos testes de contrato
+      # Execução dos testes de contrato
       - name: execute integration tests
         env:
           PYTHONPATH: .
@@ -94,6 +94,5 @@ jobs:
             script: |
               cd RideFleet
               git pull origin main
-              echo "ORS_API_KEY=$ORS_API_KEY" > .env
               sudo docker compose build api_1 api_2
               sudo docker compose up -d --no-deps api_1 api_2
