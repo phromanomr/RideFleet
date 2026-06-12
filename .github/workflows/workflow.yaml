@@ -83,5 +83,5 @@ jobs:
             script: |
               cd RideFleet
               git pull origin main
-              sudo docker compose build vrumvrum
-              sudo docker compose up -d --no-deps vrumvrum
+              sudo docker compose build api_1 api_2
+              sudo docker compose up -d --no-deps api_1 api_2
