@@ -6,7 +6,7 @@ until python -c "
 import socket
 s = socket.socket()
 s.settimeout(2)
-s.connect(('db', 5432))
+s.connect(('vrumvrum-db', 5432))
 s.close()
 " 2>/dev/null; do
   echo "Banco ainda não disponível, aguardando..."
