@@ -30,7 +30,7 @@ async def calcular_rota(origin: dict, destination: dict) -> dict | None:
 
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:
-            response = await client.post(ORS_URL, json=payload, headers=headers)
+            response = await client.post(ORS_GEOCODE_URL, json=payload, headers=headers)
             print(f"DEBUG RESPONSE: {response.text}") # Veja o que a API realmente responde
             response.raise_for_status()
             data = response.json()
