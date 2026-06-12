@@ -10,6 +10,7 @@ from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumi
 from fastapi.middleware.cors import CORSMiddleware
 import time
 from app.metrics import (endpoint_latency, requests_total,)
+import os
 
 # configura o logging ao iniciar
 setup_logging()
@@ -51,6 +52,10 @@ async def request_id_middleware(request: Request, call_next):
     request_id = str(uuid.uuid4())
     structlog.contextvars.clear_contextvars()
     structlog.contextvars.bind_contextvars(request_id=request_id)
+
+    from app import metrics
+    metrics.registrar_requisicao(os.getenv("INSTANCE_ID", "unknown"))
+
     response = await call_next(request)
     response.headers["X-Request-ID"] = request_id
     return response

@@ -4,7 +4,7 @@ from app.database import AsyncSessionLocal
 from app.models.driver_model import DriverModel
 from app.models.ride_model import RideModel
 from app import metrics
-from app.services.rabbitmq_service import obter_tamanho_fila
+from app.services.rabbitmq_service import obter_tamanho_fila, obter_tamanho_fila_saida
 import os
 
 router = APIRouter(tags=["Health"])
@@ -39,17 +39,20 @@ async def health_check(request: Request):
     except Exception:
         pass  # não crítico, só afeta o Grafana
 
-    # 2. Tamanho real da fila de entrada no RabbitMQ
+    # 2. Tamanho real das filas no RabbitMQ
     tamanho_fila = 0
+    tamanho_fila_saida = 0
     rabbitmq_status = "ok"
     try:
         tamanho_fila = await obter_tamanho_fila()
+        tamanho_fila_saida = await obter_tamanho_fila_saida()
     except Exception as e:
         rabbitmq_status = f"error: {str(e)}"
 
     # Atualiza os gauges do Prometheus com os valores atuais
     metrics.atualizar_fila(tamanho_fila)
     metrics.atualizar_motoristas(motoristas_disponiveis)
+    metrics.atualizar_fila_saida(tamanho_fila_saida)
 
     latencia_media = metrics.calcular_latencia_media()
     taxa_erro = metrics.calcular_taxa_erro()
@@ -76,11 +79,15 @@ async def health_check(request: Request):
         status = "UP"
 
     instance_id = os.getenv("INSTANCE_ID", "unknown")
+
+    metrics.atualizar_estado_servico(status)
+    
     return {
         "instance_id": instance_id,
         "status": status,
         "motoristas_disponiveis": motoristas_disponiveis,
         "tamanho_fila": tamanho_fila,
+        "tamanho_fila_saida": tamanho_fila_saida,
         "latencia_media_ms": latencia_media,
         "taxa_erro": taxa_erro,
         "alertas": alertas,

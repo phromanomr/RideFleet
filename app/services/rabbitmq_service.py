@@ -131,6 +131,12 @@ async def obter_tamanho_fila() -> int:
         return queue.declaration_result.message_count
     
     return 0
+async def obter_tamanho_fila_saida() -> int:
+    """Retorna o número de mensagens na fila de saída (overflow -> Core."""
+    if not channel:
+        return 0
+    queue = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+    return queue.declaration_result.message_count
 
 async def consumir_fila_saida(callback):
     """Fica escutando mensagens na fila de saída e delega ao Core."""

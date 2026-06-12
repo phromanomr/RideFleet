@@ -151,6 +151,34 @@ endpoint_latency = Histogram(
 def registrar_corrida_local():
     corridas_locais_total.inc()
 
+# --- Estado do serviço ---
+servico_estado = Gauge(
+    "vrumvrum_servico_estado",
+    "Estado atual do serviço: 0=UP, 1=DEGRADED, 2=DOWN"
+)
+
+# --- Fila de saída (overflow → Core) ---
+fila_saida_tamanho = Gauge(
+    "vrumvrum_fila_Saida_tamanho",
+    "Número de corridas aguardando delegação ao Core (fila de saída)"
+)
+
+# --- Requisições por instância (distribuição de carga) ---
+requisicoes_por_instancia = Counter(
+    "vrumvrum_requisicoes_por_instancia",
+    "Número de corridas aguardando delegação ao Core (fila de saída)"
+)
+
+def atualizar_estado_servico(status: str):
+    """Converte UP/DEGRADE/DOWN para 0/1/2 e atualiza o gauge."""
+    mapa = {"UP": 0, "DEGRADED": 1, "DOWN": 2}
+    servico_estado.set(mapa.get(status, 2))
+
+def atualizar_sila_saida(tamanho: int):
+    fila_saida_tamanho.set(tamanho)
+
+def registrar_requisicao(instance_id: str):
+    requisicoes_por_instancia.labels(instance_id=instance_id).inc()
 
 def registrar_corrida_delegada(status_da_delegacao: str):
     corridas_delegadas_total.labels(status=status_da_delegacao).inc()

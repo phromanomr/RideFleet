@@ -81,6 +81,39 @@
             "datasource": "Prometheus"
             }
         ]
-        }
+        },
+        {
+        "id": 6,
+        "title": "Estado do Serviço",
+        "type": "stat",
+        "gridPos": { "x": 12, "y": 4, "w": 6, "h": 4 },
+        "fieldConfig": {
+            "defaults": {
+                "mappings": [
+                    { "type": "value", "options": { "0": { "text": "UP", "color": "green" }, "1": { "text": "DEGRADED", "color": "yellow" }, "2": { "text": "DOWN", "color": "red" } } }
+                ]
+            }
+        },
+        "targets": [{ "expr": "max(vrumvrum_servico_estado)", "datasource": "Prometheus" }]
+        },
+        {
+        "id": 7,
+        "title": "Filas de Entrada e Saída",
+        "type": "timeseries",
+        "gridPos": { "x": 0, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+            { "expr": "vrumvrum_fila_tamanho", "legendFormat": "Entrada - {{instance}}", "datasource": "Prometheus" },
+            { "expr": "vrumvrum_fila_saida_tamanho", "legendFormat": "Saída - {{instance}}", "datasource": "Prometheus" }
+        ]
+        },
+        {
+        "id": 8,
+        "title": "Distribuição de Carga entre Instâncias",
+        "type": "timeseries",
+        "gridPos": { "x": 12, "y": 16, "w": 12, "h": 8 },
+        "targets": [
+            { "expr": "rate(vrumvrum_requisicoes_por_instancia[1m])", "legendFormat": "{{instance_id}}", "datasource": "Prometheus" }
+        ]
+    }
     ]
 }
