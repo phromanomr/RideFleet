@@ -159,14 +159,15 @@ servico_estado = Gauge(
 
 # --- Fila de saída (overflow → Core) ---
 fila_saida_tamanho = Gauge(
-    "vrumvrum_fila_Saida_tamanho",
+    "vrumvrum_fila_saida_tamanho",
     "Número de corridas aguardando delegação ao Core (fila de saída)"
 )
 
 # --- Requisições por instância (distribuição de carga) ---
 requisicoes_por_instancia = Counter(
     "vrumvrum_requisicoes_por_instancia",
-    "Número de corridas aguardando delegação ao Core (fila de saída)"
+    "Total de requisições por instância da API",
+    ["instance_id"]
 )
 
 def atualizar_estado_servico(status: str):
@@ -174,7 +175,7 @@ def atualizar_estado_servico(status: str):
     mapa = {"UP": 0, "DEGRADED": 1, "DOWN": 2}
     servico_estado.set(mapa.get(status, 2))
 
-def atualizar_sila_saida(tamanho: int):
+def atualizar_fila_saida(tamanho: int):
     fila_saida_tamanho.set(tamanho)
 
 def registrar_requisicao(instance_id: str):
