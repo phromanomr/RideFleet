@@ -44,7 +44,7 @@ jobs:
         env:
           PYTHONPATH: .
         run: |
-          pytest -k "contract_test and audit_test" -s -v
+          pytest tests/contract_test.py tests/audit_test.py -s -v
 
   build-and-push:
       runs-on: ubuntu-latest
