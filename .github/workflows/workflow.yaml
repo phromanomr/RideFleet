@@ -22,12 +22,6 @@ jobs:
         run: |
           pip install -r requirements.txt
 
-      - name: create .env
-        env:
-            ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
-        run: |
-          echo "ORS_API_KEY=$ORS_API_KEY" > .env
-
       - name: docker compose
         run: |
           docker compose up -d vrumvrum-db
