@@ -163,7 +163,7 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
         return False
     
     metrics.registrar_corrida_local()
-
+    
     await _ocupar_motorista(motorista.id)
     corrida.status = RideStatus.MATCH
     corrida.driver_id = motorista.id
@@ -172,6 +172,18 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
                     extras={"driver_id": motorista.id})
     await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
     await atualizar_corrida(corrida)
+
+    corrida_dict = {
+        "id": corrida.id,
+        "driver_id": motorista.id,
+        "status": corrida.status.value,
+        "origin": corrida.origin.model_dump() if hasattr(corrida.origin, 'model_dump') else corrida.origin.dict(),
+        "destination": corrida.destination.model_dump() if hasattr(corrida.destination, 'model_dump') else corrida.destination.dict(),
+        "passenger_id": corrida.passenger_id,
+        "lamport_clock": corrida.lamport_clock
+    }
+    await publicar_corrida_saida(corrida_dict)
+
     asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
     return True
 

@@ -80,27 +80,35 @@ async def metrics():
 
 # ---------------------------------------------------------------------------
 # Middleware de observabilidade
-# Registra métricas Prometheus para monitoramento da API:
-# Throughput e Latência
+# Registra métricas Prometheus e alimenta o Health Check (Latência e Erros)
 # ---------------------------------------------------------------------------
 @app.middleware("http")
 async def metrics_middleware(request: Request, call_next):
-
+    from app import metrics
+    
     inicio = time.time()
+    status_code = 500 # Fallback caso a requisição estoure um erro não tratado
 
     try:
         response = await call_next(request)
+        status_code = response.status_code
         return response
 
     finally:
-        duracao = time.time() - inicio
+        # 1. Calcula a duração em milissegundos para o Health Check
+        duracao_ms = (time.time() - inicio) * 1000
 
+        # Alimenta a função calcular_latencia_media()
+        metrics.corrida_duracao.observe(duracao_ms)
+
+        # 2. Alimenta a função calcular_taxa_erro() com base no Status HTTP
+        if status_code >= 400:
+            metrics.registrar_erro()
+        else:
+            metrics.registrar_sucesso()
+
+        # 3. Mantém o comportamento original do Prometheus (Grafana)
         if request.url.path.startswith("/rides"):
-
-            requests_total.labels(
-                endpoint=request.url.path
-            ).inc()
-
-            endpoint_latency.labels(
-                endpoint=request.url.path
-            ).observe(duracao)
+            metrics.requests_total.labels(endpoint=request.url.path).inc()
+            # Prometheus nativo prefere segundos, por isso a divisão:
+            metrics.endpoint_latency.labels(endpoint=request.url.path).observe(duracao_ms / 1000)

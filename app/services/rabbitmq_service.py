@@ -127,15 +127,16 @@ async def obter_tamanho_fila() -> int:
         
     # Fallback de segurança: se a requisição HTTP falhar, usa o método antigo
     if channel:
-        queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True)
+        queue = await channel.declare_queue(QUEUE_ENTRADA, durable=True, arguments={"x-message-ttl": TTL_QUEUE})
         return queue.declaration_result.message_count
     
     return 0
+
 async def obter_tamanho_fila_saida() -> int:
     """Retorna o número de mensagens na fila de saída (overflow -> Core."""
     if not channel:
         return 0
-    queue = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+    queue = await channel.declare_queue(QUEUE_SAIDA, durable=True, arguments={"x-message-ttl": TTL_QUEUE})
     return queue.declaration_result.message_count
 
 async def consumir_fila_saida(callback):
@@ -144,7 +145,7 @@ async def consumir_fila_saida(callback):
         return
     queue = _queues.get(QUEUE_SAIDA)
     if not queue:
-        queue = await channel.declare_queue(QUEUE_SAIDA, durable=True)
+        queue = await channel.declare_queue(QUEUE_SAIDA, durable=True, arguments={"x-message-ttl": TTL_QUEUE})
         _queues[QUEUE_SAIDA] = queue
 
     async def process_message(message: AbstractIncomingMessage):
