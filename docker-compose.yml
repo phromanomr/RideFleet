@@ -53,7 +53,7 @@ services:
     restart: always
     environment:
       SERVICE_NAME: vrumvrum
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@vrumvrum-db:5432/vrumvrum
       INSTANCE_ID: api_1
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
       LOKI_URL: http://loki:3100
@@ -61,7 +61,7 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      db:
+      vrumvrum-db:
         condition: service_healthy
     command: [
       "dockerize",
@@ -83,7 +83,7 @@ services:
     restart: always
     environment:
       SERVICE_NAME: vrumvrum
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@vrumvrum-db:5432/vrumvrum
       INSTANCE_ID: api_2
       RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
       LOKI_URL: http://loki:3100
@@ -91,13 +91,15 @@ services:
     depends_on:
       rabbitmq:
         condition: service_healthy
-      db:
+      vrumvrum-db:
         condition: service_healthy
     command: [
       "dockerize",
       "-wait", "tcp://rabbitmq:5672",
       "-timeout", "60s",
-      "./entrypoint.sh"
+      "sh",
+      "-c",
+      "sleep 3 && ./entrypoint.sh"
     ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -108,7 +110,7 @@ services:
     networks:
       - vrumvrum-net
 
-  db:
+  vrumvrum-db:
     image: postgres:16-alpine
     restart: always
     environment:

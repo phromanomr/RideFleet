@@ -16,12 +16,12 @@ async def test_rides():
         post_ride_response = await ac.post("/rides/", json={
             "passenger_id": "passageiro teste",
             "origin": {
-                "lat": -18.00, "lng": -18.00,
+                "lat": -19.2176651, "lng": -46.2246187,
                 "street": "Rua teste", "number": "1",
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -19.1952849, "lng": -46.2435436,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -50,12 +50,12 @@ async def test_get_ride_status():
         post_response = await ac.post("/rides/", json={
             "passenger_id": "passageiro_status_test",
             "origin": {
-                "lat": -18.00, "lng": -18.00,
+                "lat": -19.2176651, "lng": -46.2246187,
                 "street": "Rua teste", "number": "1",
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -19.1952849, "lng": -46.2435436,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -85,12 +85,12 @@ async def test_get_all_rides():
         ride1 = await ac.post("/rides/", json={
             "passenger_id": "passageiro_all_1",
             "origin": {
-                "lat": -18.00, "lng": -18.00,
+                "lat": -19.2176651, "lng": -46.2246187,
                 "street": "Rua teste", "number": "1",
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -19.1952849, "lng": -46.2435436,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -99,12 +99,12 @@ async def test_get_all_rides():
         ride2 = await ac.post("/rides/", json={
             "passenger_id": "passageiro_all_2",
             "origin": {
-                "lat": -18.00, "lng": -18.00,
+                "lat": -19.2176651, "lng": -46.2246187,
                 "street": "Rua teste", "number": "1",
                 "city": "Rio Paranaíba", "state": "MG"
             },
             "destination": {
-                "lat": -19.00, "lng": -20.00,
+                "lat": -19.1952849, "lng": -46.2435436,
                 "street": "Rua teste", "number": "2",
                 "city": "Rio Paranaíba", "state": "MG"
             }
@@ -142,7 +142,7 @@ async def test_get_all_rides_with_status_filter():
         post_response = await ac.post("/rides/", json={
             "passenger_id": "passageiro_filter_test",
             "origin": {
-                "lat": -18.00, "lng": -18.00,
+                "lat": -19.2176651, "lng": -46.2246187,
                 "street": "Rua teste", "number": "1",
                 "city": "Rio Paranaíba", "state": "MG"
             },
