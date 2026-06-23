@@ -67,7 +67,6 @@ async def _liberar_motorista(driver_id: str):
 
 async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
-    metrics.registrar_inicio_corrida(corrida.id)
     tamanho_fila = await obter_tamanho_fila()
 
     rota = await calcular_rota(
@@ -82,6 +81,7 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         print("Aviso: Falha ao calcular rota. Usando valores padrão.")
         corrida.eta = 0
         corrida.valor = 12.50 # Ou seu PRECO_BASE
+
 
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
     corrida_dict = {
@@ -112,6 +112,7 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         await publicar_corrida_entrada(corrida_dict)
         await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
     else:
+        metrics.registrar_corrida_delegada(status_da_delegacao="enviada_ao_core")
         log_estruturado("overflow_delegado_ao_core", corrida_id=corrida.id,
                         nivel="WARN", extras={"queue_size": tamanho_fila})
         await publicar_corrida_saida(corrida_dict)
@@ -148,9 +149,11 @@ async def processar_corrida_saida(corrida_dict: dict) -> bool:
     try:
         clock = await lamport.tick()
         await solicitar_delegacao_core(corrida_dict, clock)
+        metrics.registrar_corrida_delegada(status_da_delegacao="sucesso")
         return True
     except Exception as e:
         logger.error("erro_ao_delegar_ao_core", erro=str(e))
+        metrics.registrar_corrida_delegada(status_da_delegacao="falha_conexao")
         return False
 
 async def _atribuir_motorista(corrida: Ride) -> bool:
@@ -158,6 +161,8 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
     if not motorista:
         log_estruturado("motorista_nao_encontrado", corrida_id=corrida.id, nivel="WARN")
         return False
+    
+    metrics.registrar_corrida_local()
 
     await _ocupar_motorista(motorista.id)
     corrida.status = RideStatus.MATCH
@@ -329,6 +334,8 @@ async def receber_corrida_delegada(
     Processa uma corrida recebida por delegação do Core.
     Cria a corrida no banco, atribui motorista e inicia a simulação.
     """
+    metrics.registrar_corrida_recebida()
+
     corrida = Ride(
         id=ride_uuid,
         origin=Location(**origin),

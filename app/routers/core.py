@@ -7,6 +7,7 @@ from app.models.location import Location
 from app.models.ride import Ride, RideStatus
 from app.services.ride_service import tem_motorista_disponivel, salvar_corrida, receber_corrida_delegada
 from app.services.geo_service import calcular_preco, calcular_rota
+from app import metrics
 
 from app.services.core_service import atualizar_status
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -61,6 +62,7 @@ async def receber_atribuicao(
     atribuicao: RideAssignment,
     db: AsyncSession = Depends(get_db)
 ):
+
     relogio_sincronizado = await lamport.receive(atribuicao.logicalTimestamp)
 
     try:

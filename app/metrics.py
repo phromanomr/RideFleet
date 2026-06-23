@@ -115,3 +115,75 @@ def calcular_taxa_erro() -> float:
                 sucessos = sample.value
     total = erros + sucessos
     return round(erros / total, 2) if total else 0
+
+# =====================================================
+# OBSERVABILIDADE
+# =====================================================
+
+corridas_locais_total = Counter(
+    "ridefleet_rides_local_total",
+    "Total de corridas atendidas localmente"
+)
+
+corridas_delegadas_total = Counter(
+    "ridefleet_rides_delegated_total",
+    "Total de corridas delegadas para outros grupos",
+    ["status"] 
+)
+
+corridas_recebidas_total = Counter(
+    "ridefleet_rides_received_total",
+    "Total de corridas recebidas de outros grupos"
+)
+
+requests_total = Counter(
+    "ridefleet_requests_total",
+    "Total de requisições recebidas",
+    ["endpoint"]
+)
+
+endpoint_latency = Histogram(
+    "ridefleet_endpoint_latency_seconds",
+    "Latência dos endpoints",
+    ["endpoint"]
+)
+
+def registrar_corrida_local():
+    corridas_locais_total.inc()
+
+# --- Estado do serviço ---
+servico_estado = Gauge(
+    "vrumvrum_servico_estado",
+    "Estado atual do serviço: 0=UP, 1=DEGRADED, 2=DOWN"
+)
+
+# --- Fila de saída (overflow → Core) ---
+fila_saida_tamanho = Gauge(
+    "vrumvrum_fila_saida_tamanho",
+    "Número de corridas aguardando delegação ao Core (fila de saída)"
+)
+
+# --- Requisições por instância (distribuição de carga) ---
+requisicoes_por_instancia = Counter(
+    "vrumvrum_requisicoes_por_instancia",
+    "Total de requisições por instância da API",
+    ["instance_id"]
+)
+
+def atualizar_estado_servico(status: str):
+    """Converte UP/DEGRADE/DOWN para 0/1/2 e atualiza o gauge."""
+    mapa = {"UP": 0, "DEGRADED": 1, "DOWN": 2}
+    servico_estado.set(mapa.get(status, 2))
+
+def atualizar_fila_saida(tamanho: int):
+    fila_saida_tamanho.set(tamanho)
+
+def registrar_requisicao(instance_id: str):
+    requisicoes_por_instancia.labels(instance_id=instance_id).inc()
+
+def registrar_corrida_delegada(status_da_delegacao: str):
+    corridas_delegadas_total.labels(status=status_da_delegacao).inc()
+
+
+def registrar_corrida_recebida():
+    corridas_recebidas_total.inc()

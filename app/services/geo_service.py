@@ -24,7 +24,7 @@ async def calcular_rota(origin: dict, destination: dict) -> dict | None:
     }
 
     headers = {
-        "Authorization": ORS_API_KEY,
+        "Authorization": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjFmZGE4MzgwYmYxZTRhNTBiODgwNTQ0NzIzNzdiMmM3IiwiaCI6Im11cm11cjY0In0=",
         "Content-Type": "application/json"
     }
 
@@ -62,7 +62,7 @@ async def buscar_coordenadas(endereco_completo: str) -> dict | None:
     Busca a latitude e longitude de um endereço via OpenRouteService.
     """
     params = {
-        "api_key": ORS_API_KEY,
+        "api_key": "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjFmZGE4MzgwYmYxZTRhNTBiODgwNTQ0NzIzNzdiMmM3IiwiaCI6Im11cm11cjY0In0=",
         "text": endereco_completo,
         "size": 1  # Retorna apenas o resultado mais relevante
     }

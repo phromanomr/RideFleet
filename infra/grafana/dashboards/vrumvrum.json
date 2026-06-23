@@ -1,86 +1,103 @@
 {
-    "title": "VrumVrum - Monitoramento",
-    "uid": "vrumvrum-main",
-    "schemaVersion": 38,
-    "version": 1,
-    "refresh": "10s",
-    "panels": [
+  "title": "VrumVrum - Monitoramento",
+  "uid": "vrumvrum-main",
+  "schemaVersion": 38,
+  "version": 1,
+  "refresh": "10s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Tamanho da Fila de Corridas",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
+      "targets": [
         {
-        "id": 1,
-        "title": "Tamanho da Fila de Corridas",
-        "type": "timeseries",
-        "gridPos": { "x": 0, "y": 0, "w": 12, "h": 8 },
-        "targets": [
-            {
-            "expr": "vrumvrum_fila_tamanho",
-            "legendFormat": "{{instance}}",
-            "datasource": "Prometheus"
-            }
-        ]
-        },
-        {
-        "id": 2,
-        "title": "Motoristas Disponíveis",
-        "type": "stat",
-        "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
-        "targets": [
-            {
-            "expr": "avg(vrumvrum_motoristas_disponiveis)",
-            "legendFormat": "total",
-            "datasource": "Prometheus"
-            }
-        ]
-        },
-        {
-        "id": 3,
-        "title": "Taxa de Erro (%)",
-        "type": "gauge",
-        "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
-        "fieldConfig": {
-            "defaults": {
-            "unit": "percentunit",
-            "thresholds": {
-                "steps": [
-                { "color": "green", "value": 0 },
-                { "color": "yellow", "value": 0.1 },
-                { "color": "red", "value": 0.3 }
-                ]
-            }
-            }
-        },
-        "targets": [
-            {
-            "expr": "rate(vrumvrum_corridas_total{resultado='erro'}[5m]) / rate(vrumvrum_corridas_total[5m])",
-            "legendFormat": "taxa erro",
-            "datasource": "Prometheus"
-            }
-        ]
-        },
-        {
-        "id": 4,
-        "title": "Latência Média das Corridas (ms)",
-        "type": "timeseries",
-        "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
-        "targets": [
-            {
-            "expr": "rate(vrumvrum_corrida_duracao_ms_sum[5m]) / rate(vrumvrum_corrida_duracao_ms_count[5m])",
-            "legendFormat": "{{instance}}",
-            "datasource": "Prometheus"
-            }
-        ]
-        },
-        {
-        "id": 5,
-        "title": "Total de Corridas (sucesso vs erro)",
-        "type": "timeseries",
-        "gridPos": { "x": 12, "y": 8, "w": 12, "h": 8 },
-        "targets": [
-            {
-            "expr": "rate(vrumvrum_corridas_total[5m])",
-            "legendFormat": "{{resultado}} - {{instance}}",
-            "datasource": "Prometheus"
-            }
-        ]
+          "expr": "vrumvrum_fila_tamanho",
+          "legendFormat": "{{instance}}"
         }
-    ]
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Motoristas Disponíveis",
+      "type": "stat",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 80 }
+            ]
+          }
+        }
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area"
+      },
+      "targets": [
+        {
+          "expr": "avg(vrumvrum_motoristas_disponiveis)",
+          "legendFormat": "total"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Taxa de Erro (%)",
+      "type": "gauge",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "unit": "percentunit",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "red", "value": 0.3 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(vrumvrum_corridas_total{resultado='erro'}[5m]) / rate(vrumvrum_corridas_total[5m])",
+          "legendFormat": "taxa erro"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Total de Corridas (sucesso vs erro)",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(vrumvrum_corridas_total[5m])",
+          "legendFormat": "{{resultado}} - {{instance}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Latência Média das Corridas (ms)",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
+      "targets": [
+        {
+          "expr": "rate(vrumvrum_corrida_duracao_ms_sum[5m]) / rate(vrumvrum_corrida_duracao_ms_count[5m])",
+          "legendFormat": "{{instance}}"
+        }
+      ]
+    }
+  ]
 }
