@@ -57,6 +57,41 @@ def calcular_preco(distancia_km: float) -> float:
     """Calcula o preço da corrida com base na distância."""
     return round(PRECO_BASE + PRECO_POR_KM * distancia_km, 2)
 
+async def estimar_corrida(origin: dict, destination: dict):
+    rota = await calcular_rota(origin, destination)
+
+    if rota is None:
+        return None
+
+    return {
+        "distancia_km": rota["distancia_km"],
+        "duracao_s": rota["duracao_s"],
+        "valor": calcular_preco(rota["distancia_km"])
+    }
+
+async def estimar_corrida(origin: dict, destination: dict) -> dict:
+    """
+    Calcula distância, duração e valor estimado
+    sem criar uma corrida.
+    """
+
+    rota = await calcular_rota(origin, destination)
+
+    if rota is None:
+        return {
+            "distancia_km": 0,
+            "duracao_s": 0,
+            "valor": PRECO_BASE
+        }
+
+    return {
+        "distancia_km": rota["distancia_km"],
+        "duracao_s": rota["duracao_s"],
+        "valor": calcular_preco(
+            rota["distancia_km"]
+        )
+    }
+
 async def buscar_coordenadas(endereco_completo: str) -> dict | None:
     """
     Busca a latitude e longitude de um endereço via OpenRouteService.
