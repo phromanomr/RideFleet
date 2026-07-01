@@ -1,4 +1,5 @@
 from pydantic import BaseModel
+from app.models.location import Location
 
 # Quando o Core avisa de um leilão
 class RideAuctionNotification(BaseModel):
@@ -7,9 +8,8 @@ class RideAuctionNotification(BaseModel):
     destination: dict
     originServiceId: str
     passengerId: str
-    passengerName: str
     logicalTimestamp: int
-    auctionDeadline: str
+    auctionDeadline: str 
 
 # Quando você responde a um leilão
 class ProposalResponse(BaseModel):
@@ -23,7 +23,6 @@ class RideAssignment(BaseModel):
     origin: dict
     destination: dict
     passengerId: str
-    passengerName: str
     originServiceId: str
     logicalTimestamp: int
     lockExpiresAt: str

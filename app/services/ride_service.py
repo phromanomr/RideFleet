@@ -13,13 +13,14 @@ from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
 from app import metrics
 from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
-from app.services.core_service import solicitar_delegacao_core
+from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status
 from app.services.geo_service import calcular_preco, calcular_rota
 from app.config import (
     MAX_QUEUE_SIZE,
     DELAY_MATCH_TO_CONFIRM,
     DELAY_CONFIRMED_TO_IN_TRANSIT,
     DELAY_IN_TRANSIT_TO_COMPLETED,
+    AUCTION_TIMEOUT_SECONDS
 )
 from app.logging_config import log_estruturado, get_logger
 logger = get_logger()
@@ -112,7 +113,6 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
         await publicar_corrida_entrada(corrida_dict)
         await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
     else:
-        metrics.registrar_corrida_delegada(status_da_delegacao="enviada_ao_core")
         log_estruturado("overflow_delegado_ao_core", corrida_id=corrida.id,
                         nivel="WARN", extras={"queue_size": tamanho_fila})
         await publicar_corrida_saida(corrida_dict)
@@ -143,17 +143,21 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
     )
 
     sucesso = await _atribuir_motorista(corrida)
+
+    if sucesso:
+        metrics.registrar_corrida_local()
+        
     return sucesso
 
 async def processar_corrida_saida(corrida_dict: dict) -> bool:
     try:
         clock = await lamport.tick()
         await solicitar_delegacao_core(corrida_dict, clock)
-        metrics.registrar_corrida_delegada(status_da_delegacao="sucesso")
+        metrics.registrar_corrida_delegada()
         return True
     except Exception as e:
         logger.error("erro_ao_delegar_ao_core", erro=str(e))
-        metrics.registrar_corrida_delegada(status_da_delegacao="falha_conexao")
+        metrics.registrar_corrida_delegada()
         return False
 
 async def _atribuir_motorista(corrida: Ride) -> bool:
@@ -161,8 +165,6 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
     if not motorista:
         log_estruturado("motorista_nao_encontrado", corrida_id=corrida.id, nivel="WARN")
         return False
-    
-    metrics.registrar_corrida_local()
     
     await _ocupar_motorista(motorista.id)
     corrida.status = RideStatus.MATCH
@@ -173,52 +175,80 @@ async def _atribuir_motorista(corrida: Ride) -> bool:
     await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
     await atualizar_corrida(corrida)
 
-    corrida_dict = {
-        "id": corrida.id,
-        "driver_id": motorista.id,
-        "status": corrida.status.value,
-        "origin": corrida.origin.model_dump() if hasattr(corrida.origin, 'model_dump') else corrida.origin.dict(),
-        "destination": corrida.destination.model_dump() if hasattr(corrida.destination, 'model_dump') else corrida.destination.dict(),
-        "passenger_id": corrida.passenger_id,
-        "lamport_clock": corrida.lamport_clock
-    }
-    await publicar_corrida_saida(corrida_dict)
-
     asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
     return True
 
 
 async def _simular_corrida(corrida: Ride, driver_id: str):
     """Simula as transições de estado em background."""
-    await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
-    corrida.status = RideStatus.CONFIRM
-    await atualizar_corrida(corrida)
-    log_estruturado("corrida_confirmada", corrida_id=corrida.id,
-                    estado_anterior="match", estado_novo="confirm",
-                    extras={"driver_id": driver_id})
-    await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
 
-    await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
-    corrida.status = RideStatus.IN_TRANSIT
-    await atualizar_corrida(corrida)
-    log_estruturado("corrida_em_transito", corrida_id=corrida.id,
-                    estado_anterior="confirm", estado_novo="in_transit",
-                    extras={"driver_id": driver_id})
-    await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
+    async def _manter_lock_ativo():
+        try:
+            # Enquanto a corrida não estiver finalizada ou cancelada, renova o lock
+            while corrida.status not in (RideStatus.COMPLETE, RideStatus.CANCELED):
+                await renovar_lock(corrida.id, ttl_seconds=60)
+                await asyncio.sleep(AUCTION_TIMEOUT_SECONDS - 1)
+        except asyncio.CancelledError:
+            pass
 
-    await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
-    corrida.status = RideStatus.COMPLETE
-    await atualizar_corrida(corrida)
-    log_estruturado("corrida_concluida", corrida_id=corrida.id,
-                    estado_anterior="in_transit", estado_novo="complete",
-                    extras={"driver_id": driver_id})
-    await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
+    tarefa_lock = None
+    if corrida.delegated_to:
+        tarefa_lock = asyncio.create_task(_manter_lock_ativo())
 
-    # Atualiza métricas de monitoramento
-    metrics.registrar_fim_corrida(corrida.id)
-    metrics.registrar_sucesso()
-    await _liberar_motorista(driver_id)
-    # Obs: não chamamos mais _processar_fila() aqui pois o RabbitMQ faz esse gerenciamento de concorrência.
+    try:
+        await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
+        corrida.status = RideStatus.CONFIRM
+        await atualizar_corrida(corrida)
+
+        metrics.registrar_transicao_saga("match", "confirm")
+
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
+
+        log_estruturado("corrida_confirmada", corrida_id=corrida.id,
+                        estado_anterior="match", estado_novo="confirm",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
+
+        await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
+        corrida.status = RideStatus.IN_TRANSIT
+        await atualizar_corrida(corrida)
+
+        metrics.registrar_transicao_saga("confirm", "in_transit")
+
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
+
+        log_estruturado("corrida_em_transito", corrida_id=corrida.id,
+                        estado_anterior="confirm", estado_novo="in_transit",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
+
+        await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
+        corrida.status = RideStatus.COMPLETE
+        await atualizar_corrida(corrida)
+
+        metrics.registrar_transicao_saga("in_transit", "complete")
+
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
+
+        log_estruturado("corrida_concluida", corrida_id=corrida.id,
+                        estado_anterior="in_transit", estado_novo="complete",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
+
+        # Atualiza métricas de monitoramento
+        metrics.registrar_fim_corrida(corrida.id)
+        metrics.registrar_sucesso()
+        await _liberar_motorista(driver_id)
+        # Obs: não chamamos mais _processar_fila() aqui pois o RabbitMQ faz esse gerenciamento de concorrência.
+    finally:
+        if tarefa_lock:
+            tarefa_lock.cancel()
 
 
 async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
@@ -346,7 +376,6 @@ async def receber_corrida_delegada(
     Processa uma corrida recebida por delegação do Core.
     Cria a corrida no banco, atribui motorista e inicia a simulação.
     """
-    metrics.registrar_corrida_recebida()
 
     corrida = Ride(
         id=ride_uuid,
@@ -359,6 +388,7 @@ async def receber_corrida_delegada(
     )
 
     await salvar_corrida(corrida, db)
+    metrics.registrar_corrida_recebida()
     await log_event(ride_uuid, "ride_received_from_core", {
         "origin_service": origin_service_id
     })

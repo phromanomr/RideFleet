@@ -1,5 +1,6 @@
 import time
 from prometheus_client import Counter, Histogram, Gauge
+from app.config import ORIGIN_SERVICE_ID
 
 # ---------------------------------------------------------------------------
 # Métricas Prometheus
@@ -7,6 +8,73 @@ from prometheus_client import Counter, Histogram, Gauge
 # Histogram → distribui valores em buckets (latência por corrida)
 # Gauge     → sobe e desce (fila atual, motoristas disponíveis)
 # ---------------------------------------------------------------------------
+
+locks_acquired_total = Counter(
+    "ridefleet_locks_acquired_total", 
+    "Total de locks adquiridos", 
+    ["service"]
+)
+locks_expired_total = Counter(
+    "ridefleet_locks_expired_total", 
+    "Total de locks perdidos ou expirados", 
+    ["service"]
+)
+
+def registrar_lock_adquirido():
+    locks_acquired_total.labels(service=ORIGIN_SERVICE_ID).inc()
+
+def registrar_lock_expirado():
+    locks_expired_total.labels(service=ORIGIN_SERVICE_ID).inc()
+
+saga_transitions_total = Counter(
+    "ridefleet_saga_transitions_total", 
+    "Transições de estado na Saga", 
+    ["from_state", "to_state", "service"]
+)
+saga_compensations_total = Counter(
+    "ridefleet_saga_compensations_total", 
+    "Compensações acionadas na Saga", 
+    ["service"]
+)
+
+def registrar_transicao_saga(from_state: str, to_state: str):
+    saga_transitions_total.labels(from_state=from_state, to_state=to_state, service=ORIGIN_SERVICE_ID).inc()
+
+def registrar_compensacao_saga():
+    saga_compensations_total.labels(service=ORIGIN_SERVICE_ID).inc()
+
+circuit_breaker_state = Gauge(
+    "ridefleet_circuit_breaker_state", 
+    "Estado do CB (0=CLOSED, 1=OPEN, 2=HALF_OPEN)", 
+    ["service"]
+)
+
+def atualizar_circuit_breaker(estado: int):
+    # Por padrão, inicie com 0 (CLOSED) se ainda não implementou a lógica de falhas
+    circuit_breaker_state.labels(service=ORIGIN_SERVICE_ID).set(estado)
+
+corridas_delegadas_total = Counter(
+    "ridefleet_rides_delegated_total", 
+    "Corridas delegadas ao Core", 
+    ["service"]
+)
+corridas_locais_total = Counter(
+    "ridefleet_rides_local_total", 
+    "Corridas resolvidas internamente", 
+    ["service"]
+)
+
+def registrar_corrida_local():
+    corridas_locais_total.labels(service=ORIGIN_SERVICE_ID).inc()
+
+def registrar_corrida_delegada():
+    corridas_delegadas_total.labels(service=ORIGIN_SERVICE_ID).inc()
+
+http_request_duration_seconds = Histogram(
+    "http_request_duration_seconds",
+    "Latência dos endpoints HTTP",
+    ["handler", "method", "service"]
+)
 
 corridas_total = Counter(
     "vrumvrum_corridas_total",
@@ -116,62 +184,28 @@ def calcular_taxa_erro() -> float:
     total = erros + sucessos
     return round(erros / total, 2) if total else 0
 
-# =====================================================
-# OBSERVABILIDADE
-# =====================================================
-
-corridas_locais_total = Counter(
-    "ridefleet_rides_local_total",
-    "Total de corridas atendidas localmente"
-)
-
-corridas_delegadas_total = Counter(
-    "ridefleet_rides_delegated_total",
-    "Total de corridas delegadas para outros grupos",
-    ["status"] 
-)
-
 corridas_recebidas_total = Counter(
     "ridefleet_rides_received_total",
     "Total de corridas recebidas de outros grupos"
 )
-
-requests_total = Counter(
-    "ridefleet_requests_total",
-    "Total de requisições recebidas",
-    ["endpoint"]
-)
-
-endpoint_latency = Histogram(
-    "ridefleet_endpoint_latency_seconds",
-    "Latência dos endpoints",
-    ["endpoint"]
-)
-
-def registrar_corrida_local():
-    corridas_locais_total.inc()
-
-# --- Estado do serviço ---
 servico_estado = Gauge(
     "vrumvrum_servico_estado",
-    "Estado atual do serviço: 0=UP, 1=DEGRADED, 2=DOWN"
+    "Estado atual do servico: 0=UP, 1=DEGRADED, 2=DOWN"
 )
-
-# --- Fila de saída (overflow → Core) ---
 fila_saida_tamanho = Gauge(
     "vrumvrum_fila_saida_tamanho",
-    "Número de corridas aguardando delegação ao Core (fila de saída)"
+    "Numero de corridas aguardando delegacao ao Core (fila de saida)"
 )
-
-# --- Requisições por instância (distribuição de carga) ---
 requisicoes_por_instancia = Counter(
     "vrumvrum_requisicoes_por_instancia",
-    "Total de requisições por instância da API",
+    "Total de requisicoes por instancia da API",
     ["instance_id"]
 )
 
+def registrar_corrida_recebida():
+    corridas_recebidas_total.inc()
+
 def atualizar_estado_servico(status: str):
-    """Converte UP/DEGRADE/DOWN para 0/1/2 e atualiza o gauge."""
     mapa = {"UP": 0, "DEGRADED": 1, "DOWN": 2}
     servico_estado.set(mapa.get(status, 2))
 
@@ -181,9 +215,12 @@ def atualizar_fila_saida(tamanho: int):
 def registrar_requisicao(instance_id: str):
     requisicoes_por_instancia.labels(instance_id=instance_id).inc()
 
-def registrar_corrida_delegada(status_da_delegacao: str):
-    corridas_delegadas_total.labels(status=status_da_delegacao).inc()
-
-
-def registrar_corrida_recebida():
-    corridas_recebidas_total.inc()
+locks_acquired_total.labels(service=ORIGIN_SERVICE_ID).inc(0)
+locks_expired_total.labels(service=ORIGIN_SERVICE_ID).inc(0)
+circuit_breaker_state.labels(service=ORIGIN_SERVICE_ID).set(0)
+corridas_delegadas_total.labels(service=ORIGIN_SERVICE_ID).inc(0)
+corridas_locais_total.labels(service=ORIGIN_SERVICE_ID).inc(0)
+saga_compensations_total.labels(service=ORIGIN_SERVICE_ID).inc(0)
+saga_transitions_total.labels(from_state="match", to_state="confirm", service=ORIGIN_SERVICE_ID).inc(0)
+saga_transitions_total.labels(from_state="confirm", to_state="in_transit", service=ORIGIN_SERVICE_ID).inc(0)
+saga_transitions_total.labels(from_state="in_transit", to_state="complete", service=ORIGIN_SERVICE_ID).inc(0)

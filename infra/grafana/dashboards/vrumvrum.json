@@ -93,7 +93,7 @@
       "type": "timeseries",
       "gridPos": { "x": 0, "y": 8, "w": 12, "h": 8 },
       "targets": [
-        {
+        { 
           "expr": "rate(vrumvrum_corrida_duracao_ms_sum[5m]) / rate(vrumvrum_corrida_duracao_ms_count[5m])",
           "legendFormat": "{{instance}}"
         }

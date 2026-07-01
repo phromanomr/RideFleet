@@ -18,7 +18,7 @@ from app.logging_config import get_logger
 
 
 logger = get_logger()
-
+ 
 router = APIRouter(tags=["Webhooks do Core"])
 
 @router.post("/rides/incoming", response_model=ProposalResponse)
@@ -75,6 +75,8 @@ async def receber_atribuicao(
             lamport_clock=relogio_sincronizado,
             db=db,
         )
+
+        metrics.registrar_lock_adquirido()
         await atualizar_status(ride_uuid, "confirm", relogio_sincronizado)
         logger.info("corrida_recebida_e_confirmada", ride_uuid=ride_uuid)
         return {"status": "accepted"}

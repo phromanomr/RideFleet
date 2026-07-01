@@ -13,7 +13,7 @@ class RideStatus(str, Enum):
     CANCELED = "CANCELED"
 
 
-@dataclass
+@dataclass 
 class Ride:
     origin: Location
     destination: Location

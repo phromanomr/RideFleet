@@ -1,9 +1,11 @@
 import httpx
+from app import metrics
 from app.logging_config import get_logger
 from app.config import (
     CORE_URL,
     ORIGIN_SERVICE_ID,
-    ORIGIN_API_KEY
+    ORIGIN_API_KEY,
+    VRUMVRUM_URL
 )
 
 logger = get_logger()
@@ -19,7 +21,6 @@ async def solicitar_delegacao_core(corrida_dict: dict, lamport_clock: int):
     payload = {
         "originServiceId": ORIGIN_SERVICE_ID,
         "passengerId": corrida_dict["passenger_id"],
-        "passengerName": "Tem que adicionar",
         "origin": corrida_dict["origin"],
         "destination": corrida_dict["destination"],
         "logicalTimestamp": lamport_clock,
@@ -87,6 +88,8 @@ async def renovar_lock(ride_uuid: str, ttl_seconds: int = 60) -> bool:
                 dados_conflito = response.json()
                 # Log
                 logger.warning("falha_renovacao_lock_perdido", ride_uuid=ride_uuid, detentorado_por=dados_conflito.get("heldBy"))
+                metrics.registrar_lock_expirado()
+
                 return False
                 
             else:
@@ -97,6 +100,7 @@ async def renovar_lock(ride_uuid: str, ttl_seconds: int = 60) -> bool:
     except httpx.RequestError as e:
         # Log
         logger.error("erro_de_rede_ao_comunicar_com_core", erro=str(e))
+        metrics.registrar_lock_expirado()
         return False
 
 async def obter_propostas_leilao(ride_uuid: str) -> dict | None:
@@ -128,3 +132,35 @@ async def obter_propostas_leilao(ride_uuid: str) -> dict | None:
         # Log
         logger.error("erro_de_rede_ao_buscar_propostas", erro=str(e))
         return None
+    
+
+async def registrar_core():
+    payload = {
+        "groupId": ORIGIN_SERVICE_ID,
+        "groupName": "vrumvrum - 8",
+        "serviceUrl": VRUMVRUM_URL,
+        "contactEmail": "vrumvrum@ufv.br"
+    }
+
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        try:
+            response = await client.post(f"{CORE_URL}/groups/register", json=payload, headers=HEADERS)
+
+            if response.status_code in (200, 201):
+                logger.info("servico_registrado_com_sucesso")
+
+                apiKey = response.json().get("apiKey") 
+
+                logger.info("apiKey ", api=apiKey)
+                
+                if apiKey:
+                    HEADERS["X-API-Key"] = apiKey
+
+                return response.json()
+            else:
+                logger.error("falha_ao_registrar_servico", status_code=response.status_code, detalhes=response.text)
+                return None
+                
+        except httpx.RequestError as e:
+            logger.error("erro_de_rede_ao_registrar", erro=str(e))
+            return None

@@ -20,7 +20,6 @@ INCOMING_PAYLOAD = {
     },
     "originServiceId": "group-a",
     "passengerId": "passenger-42",
-    "passengerName": "João Silva",
     "logicalTimestamp": 18,
     "auctionDeadline": "2026-12-31T23:59:59Z"
 }
@@ -39,7 +38,6 @@ ASSIGNED_PAYLOAD = {
         "city": "Viçosa", "state": "MG"
     },
     "passengerId": "passenger-42",
-    "passengerName": "João Silva",
     "originServiceId": "group-a",
     "logicalTimestamp": 31,
     "lockExpiresAt": "2026-12-31T23:59:59Z"

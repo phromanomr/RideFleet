@@ -7,9 +7,10 @@ import structlog
 from app.routers import rides, audit, drivers, health, core, geo_service
 from app.logging_config import setup_logging, get_logger
 from app.services.rabbitmq_service import init_rabbitmq, close_rabbitmq, consumir_fila_entrada, consumir_fila_saida
+from app.services.core_service import registrar_core
 from fastapi.middleware.cors import CORSMiddleware
+from app.config import ORIGIN_SERVICE_ID
 import time
-from app.metrics import (endpoint_latency, requests_total,)
 import os
 
 # configura o logging ao iniciar
@@ -20,6 +21,9 @@ logger = get_logger()
 async def lifespan(app: FastAPI):
     # exe ao iniciar
     logger.info("servico_iniciado", servico="vrumvrum", version="1.0.0")
+
+    await registrar_core()
+    
     await init_rabbitmq()
 
     # Registra o worker que vai processar as mensagens da fila de entrada no background
@@ -95,20 +99,19 @@ async def metrics_middleware(request: Request, call_next):
         return response
 
     finally:
-        # 1. Calcula a duração em milissegundos para o Health Check
-        duracao_ms = (time.time() - inicio) * 1000
+        duracao_s = time.time() - inicio
+        duracao_ms = duracao_s * 1000
 
-        # Alimenta a função calcular_latencia_media()
+        # Alimenta as métricas de Health Check antigas
         metrics.corrida_duracao.observe(duracao_ms)
-
-        # 2. Alimenta a função calcular_taxa_erro() com base no Status HTTP
         if status_code >= 400:
             metrics.registrar_erro()
         else:
             metrics.registrar_sucesso()
 
-        # 3. Mantém o comportamento original do Prometheus (Grafana)
-        if request.url.path.startswith("/rides"):
-            metrics.requests_total.labels(endpoint=request.url.path).inc()
-            # Prometheus nativo prefere segundos, por isso a divisão:
-            metrics.endpoint_latency.labels(endpoint=request.url.path).observe(duracao_ms / 1000)
+        # NOVA MÉTRICA EXIGIDA: Grava a duração padronizada
+        metrics.http_request_duration_seconds.labels(
+            handler=request.url.path,
+            method=request.method,
+            service=ORIGIN_SERVICE_ID
+        ).observe(duracao_s)
