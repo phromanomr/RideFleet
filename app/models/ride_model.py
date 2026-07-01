@@ -44,6 +44,8 @@ class RideModel(Base):
     valor: Mapped[float] = mapped_column(Float, nullable=True)
     eta: Mapped[int] = mapped_column(Integer, default=0)
     delegated_to: Mapped[str] = mapped_column(String(255), nullable=True)
+    core_ride_uuid: Mapped[str] = mapped_column(String(36), nullable=True)      
+    delegation_winner: Mapped[str] = mapped_column(String(255), nullable=True)
     lamport_clock: Mapped[int] = mapped_column(Integer, default=0)
 
     created_at: Mapped[datetime] = mapped_column(
