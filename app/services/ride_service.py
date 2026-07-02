@@ -13,7 +13,7 @@ from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
 from app import metrics
 from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
-from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status
+from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status, obter_log_causal 
 from app.services.geo_service import calcular_preco, calcular_rota
 from app.config import (
     MAX_QUEUE_SIZE,
@@ -152,13 +152,66 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
 async def processar_corrida_saida(corrida_dict: dict) -> bool:
     try:
         clock = await lamport.tick()
-        await solicitar_delegacao_core(corrida_dict, clock)
+        resposta_core = await solicitar_delegacao_core(corrida_dict, clock)
+
+        core_ride_uuid = resposta_core.get("rideUuid")
+        if core_ride_uuid:
+            await salvar_core_ride_uuid(corrida_dict["id"], core_ride_uuid)
+            asyncio.ensure_future(
+                _consultar_vencedor_leilao(corrida_dict["id"], core_ride_uuid)
+            )
+        else:
+            logger.warning("resposta_core_sem_rideUuid", corrida_id=corrida_dict["id"], resposta=resposta_core)
+
         metrics.registrar_corrida_delegada()
         return True
     except Exception as e:
         logger.error("erro_ao_delegar_ao_core", erro=str(e))
         metrics.registrar_corrida_delegada()
         return False
+
+
+async def salvar_core_ride_uuid(ride_id: str, core_ride_uuid: str) -> None:
+    """Persiste o uuid que o Core atribuiu à corrida delegada."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
+        ride_db = result.scalar_one_or_none()
+        if ride_db:
+            ride_db.core_ride_uuid = core_ride_uuid
+            await db.commit()
+
+
+async def _consultar_vencedor_leilao(ride_id: str, core_ride_uuid: str) -> None:
+    """Espera o leilão fechar e consulta o log de auditoria pra achar o vencedor."""
+    await asyncio.sleep(11)
+
+    eventos = await obter_log_causal(core_ride_uuid)
+    if not eventos:
+        logger.warning("log_causal_vazio_ou_falhou", ride_id=ride_id)
+        return
+
+    evento_leilao = next(
+        (e for e in eventos if e.get("eventType") == "auction_closed"),
+        None
+    )
+
+    if evento_leilao is None:
+        logger.warning("evento_auction_closed_nao_encontrado", ride_id=ride_id)
+        return
+
+    logger.info("evento_auction_closed_bruto", ride_id=ride_id, evento=evento_leilao)
+
+    vencedor = evento_leilao.get("payload", {}).get("winnerGroupId") or evento_leilao.get("serviceId")
+
+    if vencedor and vencedor != "core":
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
+            ride_db = result.scalar_one_or_none()
+            if ride_db:
+                ride_db.delegation_winner = vencedor
+                await db.commit()
+        logger.info("vencedor_leilao_registrado", ride_id=ride_id, vencedor=vencedor)
+        await log_event(ride_id, "delegation_winner_recorded", {"winner": vencedor})
 
 async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()
@@ -344,6 +397,8 @@ def ride_to_response(ride_model: RideModel) -> dict:
         "valor": ride_model.valor,
         "eta": ride_model.eta,
         "delegated_to": ride_model.delegated_to,
+        "core_ride_uuid": ride_model.core_ride_uuid,        
+        "delegation_winner": ride_model.delegation_winner,
         "lamport_clock": ride_model.lamport_clock,
         "origin": {
             "lat": ride_model.origin_lat,

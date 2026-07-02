@@ -29,10 +29,10 @@ async def solicitar_delegacao_core(corrida_dict: dict, lamport_clock: int):
     
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.post(f"{CORE_URL}/rides", json=payload, headers=HEADERS)
-        # Log
-        logger.info("delegacao_aceita_pelo_core", ride_uuid=corrida_dict.get("ride_uuid"))
         response.raise_for_status()
-        return response.json()
+        data = response.json()
+        logger.info("resposta_bruta_delegacao_core", body=data)  # NOVO: log defensivo
+        return data
 
 async def atualizar_status(ride_uuid: str, novo_status: str, lamport_clock: int):
     """Atualiza o status de uma corrida"""

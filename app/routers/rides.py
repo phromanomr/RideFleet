@@ -66,3 +66,14 @@ async def get_ride(ride_id: str, db: AsyncSession = Depends(get_db)):
     if not corrida:
         raise HTTPException(status_code=404, detail="Corrida não encontrada")
     return ride_to_response(corrida)
+
+@router.get("/{ride_id}/delegation")
+async def get_delegation_info(ride_id: str, db: AsyncSession = Depends(get_db)):
+    corrida = await buscar_corrida(ride_id, db)
+    if not corrida:
+        raise HTTPException(status_code=404, detail="Corrida não encontrada")
+    return {
+        "id": ride_id,
+        "core_ride_uuid": corrida.core_ride_uuid,
+        "delegation_winner": corrida.delegation_winner,
+    }
