@@ -1,12 +1,12 @@
 # Membros do Grupo
 
-Phelipe Romano - 8135
-
 André Paz Neiva - 8103
 
-Sofia Castilho - 8145
-
 Mariana Escorcer - 8115
+
+Phelipe Romano - 8135
+
+Sofia Castilho - 8145
 
 # Contribuições
 
@@ -111,3 +111,55 @@ Mariana Escorcer - 8115
 - Implementação da indicação do serviço de origem em corridas delegadas.
 - Implementação da visualização do motorista e da localização no mapa.
 - Integração das funcionalidades de geolocalização com a interface do usuário.
+
+## Phelipe Romano (8135)
+
+## Sofia Castilho (8145)
+### Banco de Dados e Persistência
+- Configuração da conexão assíncrona com PostgreSQL via SQLAlchemy 2.x (app/database.py)
+- Implementação do modelo SQLAlchemy RideModel com achatamento dos campos de Location em colunas individuais (origin_*, destination_*)
+- Implementação do modelo SQLAlchemy AuditModel para persistência do histórico de eventos de auditoria
+- Substituição do armazenamento em memória (corridas = {}) por persistência real no PostgreSQL
+- Funções de repositório: salvar_corrida(), buscar_corrida(), atualizar_corrida(), listar_corridas(), listar_corridas_em_andamento(), buscar_status_corrida()
+
+### Migrations (Alembic)
+- Configuração do Alembic com suporte a conexões assíncronas
+- Migration inicial da tabela rides
+- Migration da tabela drivers
+- Migration da tabela audit_events com índice em ride_id
+- Migration de correção do campo ride_id
+- Integração das migrations ao entrypoint.sh para execução automática na inicialização do container
+
+### Logging Estruturado
+- Configuração do structlog para saída em JSON estruturado (app/logging_config.py)
+- LOG_LEVEL configurável via variável de ambiente (padrão: INFO)
+- Processor de exceções estruturadas (stack traces em JSON via format_exc_info)
+- Captura dos logs internos do Uvicorn no mesmo formato JSON
+- Implementação da função log_estruturado() com campos obrigatórios do Core: corrida_id, estado_anterior, estado_novo, lamport_clock
+- Middleware de request_id automático para correlação de logs por requisição (app/main.py)
+- Integração do log estruturado em todos os fluxos de negócio: criação de corrida, atribuição de motorista, enfileiramento e overflow
+
+### Handler HTTP para Loki
+- Implementação do LokiQueueHandler com envio assíncrono via fila em background (app/logging_handlers.py)
+- Ativação automática quando a variável de ambiente LOKI_URL estiver definida
+
+### Observabilidade — Infraestrutura de Logs
+- Adição do Grafana Loki ao docker-compose.yml (porta 3109)
+- Adição do Grafana ao docker-compose.yml (porta 3009)
+- Auto-provisioning do Loki como datasource no Grafana via infra/grafana/provisioning/datasources/loki.yml
+
+### Observabilidade — Métricas
+- Implementação da métrica de estado do serviço (vrumvrum_servico_estado: 0=UP, 1=DEGRADED, 2=DOWN)
+- Implementação da métrica de tamanho da fila de saída (vrumvrum_fila_saida_tamanho)
+- Implementação da métrica de distribuição de carga entre instâncias (vrumvrum_requisicoes_por_instancia)
+- Adição dos painéis correspondentes no dashboard Grafana
+
+### Containerização
+- Criação do entrypoint.sh com verificação de disponibilidade do banco, execução de migrations e inicialização da API
+- Correção de incompatibilidade de line endings (CRLF/LF) para execução em containers Linux
+- Exposição da porta 5432 do PostgreSQL para acesso externo pelo Alembic
+- Atualização do docker-compose.yml para variáveis de ambiente, volumes e dependências
+
+### Documentação
+- Seção "Visualizar Logs" no README.md com URLs, queries LogQL e variáveis de ambiente
+- Seção "Estrutura do projeto" atualizada com os novos arquivos
