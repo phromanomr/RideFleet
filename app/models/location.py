@@ -3,10 +3,10 @@ from pydantic import BaseModel, Field
 class Location(BaseModel):
     lat: float
     lng: float
-    street: str
-    number: str
-    city: str
-    state: str
+    street: str | None = None
+    number: str | None = None
+    city: str | None = None
+    state: str | None = None
 
 class GeoLocation(BaseModel):
     lat: float
