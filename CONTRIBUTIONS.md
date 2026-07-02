@@ -70,3 +70,44 @@ Mariana Escorcer - 8115
 
 ### Documentação
 - `README.md` com instruções de execução, arquitetura e endpoints
+
+## Mariana Escorcer (8115)
+
+### Monitoramento e Health Check
+- Implementação do endpoint `GET /health`.
+- Exposição do estado geral do serviço (`UP`, `DEGRADED` e `DOWN`).
+- Inclusão de informações de monitoramento no health check:
+  - quantidade de motoristas disponíveis;
+  - tamanho da fila de corridas;
+  - latência média recente.
+- Integração do Health Check ao Docker Compose para monitoramento dos containers.
+
+### Observabilidade
+- Implementação do endpoint `/metrics` compatível com Prometheus.
+- Desenvolvimento das métricas de:
+  - corridas locais;
+  - corridas delegadas para outros serviços;
+  - corridas recebidas por delegação;
+  - latência dos endpoints;
+  - throughput de requisições.
+- Configuração da infraestrutura de monitoramento com Prometheus.
+- Configuração dos dashboards no Grafana para visualização das métricas.
+
+### Geolocalização
+- Implementação da integração com o serviço de geolocalização para cálculo de rotas.
+- Desenvolvimento do cálculo de ETA para estimativa do tempo de chegada.
+- Integração da geolocalização ao fluxo de solicitação e acompanhamento de corridas.
+
+### Corridas
+- Implementação da indicação do serviço/grupo responsável por corridas delegadas.
+- Adequação dos modelos e respostas da API para suportar informações de delegação.
+
+### Front-end *(repositório separado)*
+- Desenvolvimento da tela de solicitação de corrida.
+- Desenvolvimento da tela de acompanhamento da corrida.
+- Integração do aplicativo com os endpoints do backend.
+- Implementação da atualização do status da corrida em tempo real.
+- Exibição do ETA da corrida.
+- Implementação da indicação do serviço de origem em corridas delegadas.
+- Implementação da visualização do motorista e da localização no mapa.
+- Integração das funcionalidades de geolocalização com a interface do usuário.
