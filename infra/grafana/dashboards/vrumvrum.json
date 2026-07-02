@@ -43,7 +43,7 @@
       },
       "targets": [
         {
-          "expr": "avg(vrumvrum_motoristas_disponiveis)",
+          "expr": "round(avg(vrumvrum_motoristas_disponiveis))",
           "legendFormat": "total"
         }
       ]
@@ -70,8 +70,8 @@
       },
       "targets": [
         {
-          "expr": "rate(vrumvrum_corridas_total{resultado='erro'}[5m]) / rate(vrumvrum_corridas_total[5m])",
-          "legendFormat": "taxa erro"
+          "expr": "sum by (job) (increase(vrumvrum_corridas_total{resultado='erro'}[5m]))/sum by (job) (increase(vrumvrum_corridas_total[5m]))",
+          "legendFormat": "{{job}}"
         }
       ]
     },
@@ -82,8 +82,8 @@
       "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
       "targets": [
         {
-          "expr": "rate(vrumvrum_corridas_total[5m])",
-          "legendFormat": "{{resultado}} - {{instance}}"
+          "expr": "sum by (resultado) (rate(vrumvrum_corridas_total[5m]))",
+          "legendFormat": "{{resultado}}"
         }
       ]
     },

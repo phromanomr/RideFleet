@@ -81,7 +81,7 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
     else:
         print("Aviso: Falha ao calcular rota. Usando valores padrão.")
         corrida.eta = 0
-        corrida.valor = 12.50 # Ou seu PRECO_BASE
+        corrida.valor = 5.0 # Ou seu PRECO_BASE
 
 
     # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
@@ -106,7 +106,11 @@ async def solicitar_corrida(corrida: Ride) -> Ride:
 
     if await tem_motorista_disponivel() and tamanho_fila == 0:
         log_estruturado("motorista_disponível", corrida_id=corrida.id, estado_novo="match")
-        await _atribuir_motorista(corrida)
+        sucesso = await _atribuir_motorista(corrida)
+        if sucesso:
+            metrics.registrar_corrida_local()
+        else:
+            metrics.registrar_erro()
     elif tamanho_fila < MAX_QUEUE_SIZE:
         log_estruturado("corrida_enfileirada", corrida_id=corrida.id,
                         extras={"queue_size": tamanho_fila + 1})
@@ -146,6 +150,8 @@ async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
 
     if sucesso:
         metrics.registrar_corrida_local()
+    else:
+        metrics.registrar_erro()
         
     return sucesso
 
@@ -168,6 +174,7 @@ async def processar_corrida_saida(corrida_dict: dict) -> bool:
     except Exception as e:
         logger.error("erro_ao_delegar_ao_core", erro=str(e))
         metrics.registrar_corrida_delegada()
+        metrics.registrar_erro()
         return False
 
 
@@ -242,6 +249,7 @@ async def _simular_corrida(corrida: Ride, driver_id: str):
                 await renovar_lock(corrida.id, ttl_seconds=60)
                 await asyncio.sleep(AUCTION_TIMEOUT_SECONDS - 1)
         except asyncio.CancelledError:
+            metrics.registrar_erro()
             pass
 
     tarefa_lock = None

@@ -104,10 +104,10 @@ async def metrics_middleware(request: Request, call_next):
 
         # Alimenta as métricas de Health Check antigas
         metrics.corrida_duracao.observe(duracao_ms)
-        if status_code >= 400:
-            metrics.registrar_erro()
-        else:
-            metrics.registrar_sucesso()
+        #if status_code >= 400:
+        #    metrics.registrar_erro()
+        #else:
+        #    metrics.registrar_sucesso()
 
         # NOVA MÉTRICA EXIGIDA: Grava a duração padronizada
         metrics.http_request_duration_seconds.labels(

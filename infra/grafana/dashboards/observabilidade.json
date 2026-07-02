@@ -67,7 +67,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "sum(rate(ridefleet_requests_total[1m]))",
+                        "expr": "sum(rate(vrumvrum_requisicoes_por_instancia_total[1m]))",
                         "legendFormat": "__auto",
                         "range": true
                       }
@@ -625,33 +625,7 @@
                       "mode": "off"
                     }
                   }
-                },
-                "overrides": [
-                  {
-                    "__systemRef": "hideSeriesFrom",
-                    "matcher": {
-                      "id": "byNames",
-                      "options": {
-                        "mode": "exclude",
-                        "names": [
-                          "/rides/all"
-                        ],
-                        "prefix": "All except:",
-                        "readOnly": true
-                      }
-                    },
-                    "properties": [
-                      {
-                        "id": "custom.hideFrom",
-                        "value": {
-                          "legend": false,
-                          "tooltip": true,
-                          "viz": true
-                        }
-                      }
-                    ]
-                  }
-                ]
+                }
               }
             }
           }
@@ -680,7 +654,7 @@
                       },
                       "spec": {
                         "editorMode": "code",
-                        "expr": "rate(ridefleet_requests_total[1m])",
+                        "expr": "rate(vrumvrum_requisicoes_por_instancia_total[1m])",
                         "legendFormat": "{{instance}}",
                         "range": true
                       }
@@ -923,7 +897,7 @@
                       "group": "",
                       "version": "v0",
                       "spec": {
-                        "expr": "rate(vrumvrum_requisicoes_por_instancia_created[1m])",
+                        "expr": "rate(vrumvrum_requisicoes_por_instancia_total[1m])",
                         "legendFormat": "{{instance_id}}"
                       }
                     },

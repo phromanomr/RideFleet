@@ -29,5 +29,5 @@ TEST_DATABASE_URL = "postgresql+asyncpg://postgres:postgres@localhost:5439/vrumv
 
 # --- Geolocalização ---
 ORS_API_KEY = os.getenv("ORS_API_KEY", "eyJvcmciOiI1YjNjZTM1OTc4NTExMTAwMDFjZjYyNDgiLCJpZCI6IjFmZGE4MzgwYmYxZTRhNTBiODgwNTQ0NzIzNzdiMmM3IiwiaCI6Im11cm11cjY0In0=")
-PRECO_BASE = 5.00
-PRECO_POR_KM = 2.00
+PRECO_BASE = 0.50
+PRECO_POR_KM = 0.50
