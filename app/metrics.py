@@ -177,12 +177,16 @@ def calcular_taxa_erro() -> float:
     sucessos = 0
     for metric in corridas_total.collect():
         for sample in metric.samples:
+
+            if not sample.name.endswith("_total"):
+                continue
+            
             if sample.labels.get("resultado") == "erro":
-                erros = sample.value
+                erros += sample.value
             elif sample.labels.get("resultado") == "sucesso":
-                sucessos = sample.value
+                sucessos += sample.value
     total = erros + sucessos
-    return round(erros / total, 2) if total else 0
+    return round(erros / total, 2) if total != 0 else 0
 
 corridas_recebidas_total = Counter(
     "ridefleet_rides_received_total",

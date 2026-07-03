@@ -70,7 +70,7 @@
       },
       "targets": [
         {
-          "expr": "sum by (job) (increase(vrumvrum_corridas_total{resultado='erro'}[5m]))/sum by (job) (increase(vrumvrum_corridas_total[5m]))",
+          "expr": "(sum by (job) (increase(vrumvrum_corridas_total{resultado='erro'}[5m]))/(sum by (job) (increase(vrumvrum_corridas_total[5m])) > 0))or on(job)(sum by (job) (increase(vrumvrum_corridas_total[5m])) * 0)",
           "legendFormat": "{{job}}"
         }
       ]
