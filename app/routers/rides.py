@@ -15,6 +15,10 @@ from app.services.ride_service import (
     buscar_status_corrida,
     ride_to_response
 )
+import httpx
+from app.config import CORE_URL
+from app.services.core_service import HEADERS    
+import json
 
 router = APIRouter(prefix="/rides", tags=["rides"])
 
@@ -65,6 +69,55 @@ async def get_ride(ride_id: str, db: AsyncSession = Depends(get_db)):
     corrida = await buscar_corrida(ride_id, db)
     if not corrida:
         raise HTTPException(status_code=404, detail="Corrida não encontrada")
+    from app.logging_config import get_logger
+    logger = get_logger()
+
+    # Se a corrida foi delegada ou possui UUID do Core, atuamos como Proxy (BFF)
+    if corrida.core_ride_uuid or corrida.status in ["delegated", "assigned", "REQUEST"]:
+        alvo_uuid = corrida.core_ride_uuid
+        try:
+            async with httpx.AsyncClient(timeout=3.0) as client:
+
+                resposta = await client.get(f"{CORE_URL}/rides/{alvo_uuid}/audit", headers=HEADERS)
+                
+                if resposta.status_code == 200:
+                    dados_audit = resposta.json()
+                    eventos = dados_audit.get("events", [])
+                    resposta_formatada = ride_to_response(corrida)
+                    
+                    # 1. Identificar o Vencedor do Leilão
+                    for ev in eventos:
+                        if ev.get("eventType") == "auction_closed":
+                            payload = ev.get("payload", {})
+                            vencedor = payload.get("winner") or ev.get("serviceId")
+                            if vencedor and vencedor != "core":
+                                resposta_formatada["delegation_winner"] = vencedor
+
+                    # 2. Convertendo todos os eventos em uma string única (em minúsculas)
+                    # para procurar a existência de qualquer estado, independentemente do campo (toState, newState, eventType)
+                    texto_eventos = json.dumps(eventos).lower()
+
+                
+                    # 3. BUSCA HIERÁRQUICA: Começando dos terminais descendo até a confirmação
+                    if any(t in texto_eventos for t in ["complete", "completed", "finish", "finished"]):
+                        resposta_formatada["status"] = "COMPLETE"
+                    elif any(t in texto_eventos for t in ["cancel", "canceled", "cancelled", "failed", "no_driver"]):
+                        resposta_formatada["status"] = "CANCELED"
+                    elif any(t in texto_eventos for t in ["in_transit", "intransit", "started", "em_corrida"]):
+                        resposta_formatada["status"] = "IN_TRANSIT"
+                    elif any(t in texto_eventos for t in ["confirm", "confirmed", "match", "matched", "assigned", "accepted"]):
+                        resposta_formatada["status"] = "CONFIRM"
+                    # Se não achou texto de transição, mas encontrou que o leilão já tem vencedor, força CONFIRM
+                    elif resposta_formatada.get("delegation_winner") and resposta_formatada.get("status") == "REQUEST":
+                        resposta_formatada["status"] = "CONFIRM"
+
+                    return resposta_formatada
+                else:
+                    logger.warning(f"Core retornou status {resposta.status_code} ao buscar /audit para {alvo_uuid}")
+
+        except Exception as e:
+            pass
+
     return ride_to_response(corrida)
 
 @router.get("/{ride_id}/delegation")

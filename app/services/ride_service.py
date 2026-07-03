@@ -13,7 +13,7 @@ from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
 from app import metrics
 from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
-from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status, obter_log_causal 
+from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status, obter_log_causal, obter_status_corrida
 from app.services.geo_service import calcular_preco, calcular_rota
 from app.config import (
     MAX_QUEUE_SIZE,
@@ -189,36 +189,47 @@ async def salvar_core_ride_uuid(ride_id: str, core_ride_uuid: str) -> None:
 
 
 async def _consultar_vencedor_leilao(ride_id: str, core_ride_uuid: str) -> None:
-    """Espera o leilão fechar e consulta o log de auditoria pra achar o vencedor."""
-    await asyncio.sleep(11)
+    """Espera o leilão fechar e consulta o status no Core com retries para achar o vencedor."""
+    # Espera inicial para dar tempo de o leilão de 10s correr
+    await asyncio.sleep(12)
 
-    eventos = await obter_log_causal(core_ride_uuid)
-    if not eventos:
-        logger.warning("log_causal_vazio_ou_falhou", ride_id=ride_id)
+    vencedor_leilao = None
+    
+    # Tenta até 4 vezes com intervalo de 2s (cobrindo até 18s no total)
+    for tentativa in range(1, 5):
+        status = await obter_status_corrida(core_ride_uuid)
+        
+        if status:
+            vencedor_leilao = status.get("assignedServiceId")
+            if vencedor_leilao and vencedor_leilao != "core":
+                break  # Encontrou o vencedor, sai do loop!
+        
+        logger.info(
+            "aguardando_fechamento_leilao", 
+            ride_id=ride_id, 
+            tentativa=tentativa
+        )
+        await asyncio.sleep(2)
+
+    if not vencedor_leilao or vencedor_leilao == "core":
+        logger.warning(
+            "leilao_encerrado_sem_vencedor_atribuido", 
+            ride_id=ride_id, 
+            core_uuid=core_ride_uuid
+        )
         return
 
-    evento_leilao = next(
-        (e for e in eventos if e.get("eventType") == "auction_closed"),
-        None
-    )
+    logger.info("vencedor_declarado", ride_id=ride_id, vencedor=vencedor_leilao)
 
-    if evento_leilao is None:
-        logger.warning("evento_auction_closed_nao_encontrado", ride_id=ride_id)
-        return
-
-    logger.info("evento_auction_closed_bruto", ride_id=ride_id, evento=evento_leilao)
-
-    vencedor = evento_leilao.get("payload", {}).get("winnerGroupId") or evento_leilao.get("serviceId")
-
-    if vencedor and vencedor != "core":
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
-            ride_db = result.scalar_one_or_none()
-            if ride_db:
-                ride_db.delegation_winner = vencedor
-                await db.commit()
-        logger.info("vencedor_leilao_registrado", ride_id=ride_id, vencedor=vencedor)
-        await log_event(ride_id, "delegation_winner_recorded", {"winner": vencedor})
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
+        ride_db = result.scalar_one_or_none()
+        if ride_db:
+            ride_db.delegation_winner = vencedor_leilao
+            await db.commit()
+            
+    logger.info("vencedor_leilao_registrado", ride_id=ride_id, vencedor=vencedor_leilao)
+    await log_event(ride_id, "delegation_winner_recorded", {"winner": vencedor_leilao})
 
 async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()

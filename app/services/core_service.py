@@ -62,6 +62,11 @@ async def obter_log_causal(ride_uuid: str):
     async with httpx.AsyncClient(timeout=10.0) as client:
         response = await client.get(f"{CORE_URL}/rides/{ride_uuid}/audit", headers=HEADERS)
         return response.json()
+    
+async def obter_status_corrida(ride_uuid: str):
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        response = await client.get(f"{CORE_URL}/rides/{ride_uuid}/status", headers=HEADERS)
+        return response.json()
  
 async def renovar_lock(ride_uuid: str, ttl_seconds: int = 60) -> bool:
     """Renova o prazo do lock distribuído da corrida no Core. Chamar periodicamente em caso de demora para não perder o lock"""
