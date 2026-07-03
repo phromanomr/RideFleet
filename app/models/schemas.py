@@ -16,7 +16,10 @@ class RideResponse(BaseModel):
     passenger_id: str
     driver_id: Optional[str] = None
     valor: Optional[float] = None
+    eta: Optional[int]
     delegated_to: Optional[str] = None
+    core_ride_uuid: Optional[str] = None        
+    delegation_winner: Optional[str] = None
     lamport_clock: int
 
     class Config:

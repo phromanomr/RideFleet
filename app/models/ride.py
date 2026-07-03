@@ -13,7 +13,7 @@ class RideStatus(str, Enum):
     CANCELED = "CANCELED"
 
 
-@dataclass
+@dataclass 
 class Ride:
     origin: Location
     destination: Location
@@ -22,6 +22,7 @@ class Ride:
     status: RideStatus = RideStatus.REQUEST
     driver_id: str | None = None
     valor: float | None = None
+    eta: int | None = None
     delegated_to: str | None = None
     lamport_clock: int = 0
     created_at: datetime = field(default_factory=datetime.now)

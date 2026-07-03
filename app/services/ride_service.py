@@ -1,24 +1,32 @@
 # app/services/ride_service.py
 
-import random
 import asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from app.models.ride_model import RideModel
 
+from app.distributed.logical_clock import lamport
+from app.models.ride_model import RideModel
 from app.models.ride import Ride, RideStatus
+from app.models.location import Location
 from app.models.driver_model import DriverModel
 from app.distributed.logical_clock import log_event
 from app.database import AsyncSessionLocal
-from app import state, metrics
+from app import metrics
+from app.services.rabbitmq_service import publicar_corrida_entrada, publicar_corrida_saida, obter_tamanho_fila
+from app.services.core_service import solicitar_delegacao_core, renovar_lock, atualizar_status, obter_log_causal, obter_status_corrida
+from app.services.geo_service import calcular_preco, calcular_rota
 from app.config import (
     MAX_QUEUE_SIZE,
-    REJECTION_CHANCE,
     DELAY_MATCH_TO_CONFIRM,
     DELAY_CONFIRMED_TO_IN_TRANSIT,
     DELAY_IN_TRANSIT_TO_COMPLETED,
+    AUCTION_TIMEOUT_SECONDS
 )
+from app.logging_config import log_estruturado, get_logger
+logger = get_logger()
 
+# Lock global de verificação de tamanho de fila. Isso evita que o limite da fila interna seja ultrapassado
+request_lock = asyncio.Lock()
 
 async def _buscar_motorista_disponivel() -> DriverModel | None:
     """Busca um motorista disponível no banco."""
@@ -58,90 +66,261 @@ async def _liberar_motorista(driver_id: str):
             await db.commit()
 
 
-def _motorista_aceitou() -> bool:
-    return random.random() > REJECTION_CHANCE
-
-
 async def solicitar_corrida(corrida: Ride) -> Ride:
     # Inicia monitoramento da corrida
-    metrics.registrar_inicio_corrida(corrida.id)
-    if await tem_motorista_disponivel():
-        await _atribuir_motorista(corrida)
-    elif len(state.fila) < MAX_QUEUE_SIZE:
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
+    tamanho_fila = await obter_tamanho_fila()
+
+    rota = await calcular_rota(
+        {"lat": corrida.origin.lat, "lng": corrida.origin.lng}, 
+        {"lat": corrida.destination.lat, "lng": corrida.destination.lng}
+    )
+    
+    if rota is not None:
+        corrida.eta = int(rota["duracao_s"])
+        corrida.valor = calcular_preco(rota["distancia_km"])
     else:
-        corrida_a_delegar = state.fila.popleft()
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
-        await _delegar_ao_core(corrida_a_delegar)
+        print("Aviso: Falha ao calcular rota. Usando valores padrão.")
+        corrida.eta = 0
+        corrida.valor = 5.0 # Ou seu PRECO_BASE
+
+
+    # Prepara o dicionário para caso precise ir pra fila (RabbitMQ)
+    corrida_dict = {
+        "id": corrida.id,
+        "origin": corrida.origin.model_dump() if hasattr(corrida.origin, 'model_dump') else corrida.origin.dict(),
+        "destination": corrida.destination.model_dump() if hasattr(corrida.destination, 'model_dump') else corrida.destination.dict(),
+        "passenger_id": corrida.passenger_id,
+        "status": corrida.status.value,
+        "driver_id": corrida.driver_id,
+        "valor": corrida.valor,
+        "eta": corrida.eta,
+        "delegated_to": corrida.delegated_to,
+        "lamport_clock": corrida.lamport_clock,
+    }
+
+    await atualizar_corrida(corrida)
+
+    # Verifica/Atribui o lock a uma solicitação de corrida
+    async with request_lock:
+        tamanho_fila = await obter_tamanho_fila()
+
+    if await tem_motorista_disponivel() and tamanho_fila == 0:
+        log_estruturado("motorista_disponível", corrida_id=corrida.id, estado_novo="match")
+        sucesso = await _atribuir_motorista(corrida)
+        if sucesso:
+            metrics.registrar_corrida_local()
+        else:
+            metrics.registrar_erro()
+    elif tamanho_fila < MAX_QUEUE_SIZE:
+        log_estruturado("corrida_enfileirada", corrida_id=corrida.id,
+                        extras={"queue_size": tamanho_fila + 1})
+        await publicar_corrida_entrada(corrida_dict)
+        await log_event(corrida.id, "ride_queued", {"queue_size": tamanho_fila + 1})
+    else:
+        log_estruturado("overflow_delegado_ao_core", corrida_id=corrida.id,
+                        nivel="WARN", extras={"queue_size": tamanho_fila})
+        await publicar_corrida_saida(corrida_dict)
+        await log_event(corrida.id, "overflow_reached_queued_for_delegation", {"queue_size": tamanho_fila})
+
     return corrida
 
 
-async def _atribuir_motorista(corrida: Ride):
+async def processar_corrida_da_fila(corrida_dict: dict) -> bool:
+    """
+    Worker chamado pelo consumidor do RabbitMQ na fila de entrada.
+    """
+    if not await tem_motorista_disponivel():
+        return False
+
+    # Recria o objeto dataclass Ride
+    corrida = Ride(
+        id=corrida_dict["id"],
+        origin=Location(**corrida_dict["origin"]),
+        destination=Location(**corrida_dict["destination"]),
+        passenger_id=corrida_dict["passenger_id"],
+        status=RideStatus(corrida_dict["status"]),
+        driver_id=corrida_dict.get("driver_id"),
+        valor=corrida_dict.get("valor"),
+        eta=corrida_dict.get("eta"),
+        delegated_to=corrida_dict.get("delegated_to"),
+        lamport_clock=corrida_dict.get("lamport_clock", 0)
+    )
+
+    sucesso = await _atribuir_motorista(corrida)
+
+    if sucesso:
+        metrics.registrar_corrida_local()
+    else:
+        metrics.registrar_erro()
+        
+    return sucesso
+
+async def processar_corrida_saida(corrida_dict: dict) -> bool:
+    try:
+        clock = await lamport.tick()
+        resposta_core = await solicitar_delegacao_core(corrida_dict, clock)
+
+        core_ride_uuid = resposta_core.get("rideUuid")
+        if core_ride_uuid:
+            await salvar_core_ride_uuid(corrida_dict["id"], core_ride_uuid)
+            asyncio.ensure_future(
+                _consultar_vencedor_leilao(corrida_dict["id"], core_ride_uuid)
+            )
+        else:
+            logger.warning("resposta_core_sem_rideUuid", corrida_id=corrida_dict["id"], resposta=resposta_core)
+
+        metrics.registrar_corrida_delegada()
+        return True
+    except Exception as e:
+        logger.error("erro_ao_delegar_ao_core", erro=str(e))
+        metrics.registrar_corrida_delegada()
+        metrics.registrar_erro()
+        return False
+
+
+async def salvar_core_ride_uuid(ride_id: str, core_ride_uuid: str) -> None:
+    """Persiste o uuid que o Core atribuiu à corrida delegada."""
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
+        ride_db = result.scalar_one_or_none()
+        if ride_db:
+            ride_db.core_ride_uuid = core_ride_uuid
+            await db.commit()
+
+
+async def _consultar_vencedor_leilao(ride_id: str, core_ride_uuid: str) -> None:
+    """Espera o leilão fechar e consulta o status no Core com retries para achar o vencedor."""
+    # Espera inicial para dar tempo de o leilão de 10s correr
+    await asyncio.sleep(12)
+
+    vencedor_leilao = None
+    
+    # Tenta até 4 vezes com intervalo de 2s (cobrindo até 18s no total)
+    for tentativa in range(1, 5):
+        status = await obter_status_corrida(core_ride_uuid)
+        
+        if status:
+            vencedor_leilao = status.get("assignedServiceId")
+            if vencedor_leilao and vencedor_leilao != "core":
+                break  # Encontrou o vencedor, sai do loop!
+        
+        logger.info(
+            "aguardando_fechamento_leilao", 
+            ride_id=ride_id, 
+            tentativa=tentativa
+        )
+        await asyncio.sleep(2)
+
+    if not vencedor_leilao or vencedor_leilao == "core":
+        logger.warning(
+            "leilao_encerrado_sem_vencedor_atribuido", 
+            ride_id=ride_id, 
+            core_uuid=core_ride_uuid
+        )
+        return
+
+    logger.info("vencedor_declarado", ride_id=ride_id, vencedor=vencedor_leilao)
+
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(select(RideModel).where(RideModel.id == ride_id))
+        ride_db = result.scalar_one_or_none()
+        if ride_db:
+            ride_db.delegation_winner = vencedor_leilao
+            await db.commit()
+            
+    logger.info("vencedor_leilao_registrado", ride_id=ride_id, vencedor=vencedor_leilao)
+    await log_event(ride_id, "delegation_winner_recorded", {"winner": vencedor_leilao})
+
+async def _atribuir_motorista(corrida: Ride) -> bool:
     motorista = await _buscar_motorista_disponivel()
     if not motorista:
-        # motorista sumiu entre a verificação e a atribuição — enfileira
-        state.fila.append(corrida)
-        await log_event(corrida.id, "ride_queued", {"queue_size": len(state.fila)})
-        return
-    if _motorista_aceitou():
-        await _ocupar_motorista(motorista.id)
-        corrida.status = RideStatus.MATCH
-        corrida.driver_id = motorista.id
-        await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
-        await atualizar_corrida(corrida)  # ← adiciona aqui
-        asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
-    else:
-        state.fila.appendleft(corrida)
-        metrics.registrar_erro()
-        await log_event(corrida.id, "ride_rejected_by_driver", {"driver_id": motorista.id})
+        log_estruturado("motorista_nao_encontrado", corrida_id=corrida.id, nivel="WARN")
+        return False
+    
+    await _ocupar_motorista(motorista.id)
+    corrida.status = RideStatus.MATCH
+    corrida.driver_id = motorista.id
+    log_estruturado("motorista_atribuido", corrida_id=corrida.id,
+                    estado_anterior="request", estado_novo="match",
+                    extras={"driver_id": motorista.id})
+    await log_event(corrida.id, "ride_matched", {"driver_id": motorista.id})
+    await atualizar_corrida(corrida)
+
+    asyncio.ensure_future(_simular_corrida(corrida, motorista.id))
+    return True
 
 
 async def _simular_corrida(corrida: Ride, driver_id: str):
     """Simula as transições de estado em background."""
-    await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
-    corrida.status = RideStatus.CONFIRM
-    await atualizar_corrida(corrida)
-    await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
 
-    await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
-    corrida.status = RideStatus.IN_TRANSIT
-    await atualizar_corrida(corrida)
-    await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
+    async def _manter_lock_ativo():
+        try:
+            # Enquanto a corrida não estiver finalizada ou cancelada, renova o lock
+            while corrida.status not in (RideStatus.COMPLETE, RideStatus.CANCELED):
+                await renovar_lock(corrida.id, ttl_seconds=60)
+                await asyncio.sleep(AUCTION_TIMEOUT_SECONDS - 1)
+        except asyncio.CancelledError:
+            metrics.registrar_erro()
+            pass
 
-    await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
-    corrida.status = RideStatus.COMPLETE
-    await atualizar_corrida(corrida)
-    await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
-    # Atualiza métricas de monitoramento
-    metrics.registrar_fim_corrida(corrida.id)
-    metrics.registrar_sucesso()
-    await _liberar_motorista(driver_id)
-    await _processar_fila()
+    tarefa_lock = None
+    if corrida.delegated_to:
+        tarefa_lock = asyncio.create_task(_manter_lock_ativo())
 
+    try:
+        await asyncio.sleep(DELAY_MATCH_TO_CONFIRM)
+        corrida.status = RideStatus.CONFIRM
+        await atualizar_corrida(corrida)
 
-async def _processar_fila():
-    if not state.fila:
-        return
-    if not await tem_motorista_disponivel():
-        return
-    corrida = state.fila.popleft()
-    await _atribuir_motorista(corrida)
+        metrics.registrar_transicao_saga("match", "confirm")
 
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
 
-async def _delegar_ao_core(corrida: Ride):
-    """
-    Placeholder — será implementado na Semana 3.
-    TODO:
-      - Chamar POST /rides no Core com o JSON de delegação
-      - Iniciar polling em background em GET /rides/{id}/status
-      - Atualizar o status da nossa corrida conforme o Core responder
-      - Manter a corrida no state.corridas para o passageiro acompanhar
-    """
-    corrida.status = RideStatus.CANCELED
-    metrics.registrar_erro()
-    await log_event(corrida.id, "ride_delegated_to_core", {"reason": "queue_full"})
+        log_estruturado("corrida_confirmada", corrida_id=corrida.id,
+                        estado_anterior="match", estado_novo="confirm",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_confirmed", {"driver_id": driver_id})
+
+        await asyncio.sleep(DELAY_CONFIRMED_TO_IN_TRANSIT)
+        corrida.status = RideStatus.IN_TRANSIT
+        await atualizar_corrida(corrida)
+
+        metrics.registrar_transicao_saga("confirm", "in_transit")
+
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
+
+        log_estruturado("corrida_em_transito", corrida_id=corrida.id,
+                        estado_anterior="confirm", estado_novo="in_transit",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_in_transit", {"driver_id": driver_id})
+
+        await asyncio.sleep(DELAY_IN_TRANSIT_TO_COMPLETED)
+        corrida.status = RideStatus.COMPLETE
+        await atualizar_corrida(corrida)
+
+        metrics.registrar_transicao_saga("in_transit", "complete")
+
+        # Avisa o Core
+        if corrida.delegated_to:
+            await atualizar_status(corrida.id, corrida.status.value.lower(), await lamport.tick())
+
+        log_estruturado("corrida_concluida", corrida_id=corrida.id,
+                        estado_anterior="in_transit", estado_novo="complete",
+                        extras={"driver_id": driver_id})
+        await log_event(corrida.id, "ride_completed", {"driver_id": driver_id})
+
+        # Atualiza métricas de monitoramento
+        metrics.registrar_fim_corrida(corrida.id)
+        metrics.registrar_sucesso()
+        await _liberar_motorista(driver_id)
+        # Obs: não chamamos mais _processar_fila() aqui pois o RabbitMQ faz esse gerenciamento de concorrência.
+    finally:
+        if tarefa_lock:
+            tarefa_lock.cancel()
 
 
 async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
@@ -164,6 +343,7 @@ async def salvar_corrida(corrida: Ride, db: AsyncSession) -> RideModel:
         passenger_id=corrida.passenger_id,
         driver_id=corrida.driver_id,
         valor=corrida.valor,
+        eta=corrida.eta,
         delegated_to=corrida.delegated_to,
         lamport_clock=corrida.lamport_clock,
     )
@@ -180,6 +360,7 @@ async def buscar_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
     )
     return result.scalar_one_or_none()
 
+
 async def atualizar_corrida(corrida: Ride) -> None:
     """Persiste as mudanças de status e driver_id da corrida no banco."""
     async with AsyncSessionLocal() as db:
@@ -190,5 +371,103 @@ async def atualizar_corrida(corrida: Ride) -> None:
         if ride_db:
             ride_db.status = corrida.status
             ride_db.driver_id = corrida.driver_id
+            ride_db.valor = corrida.valor
+            ride_db.eta = corrida.eta
             ride_db.lamport_clock = corrida.lamport_clock
             await db.commit()
+
+async def buscar_status_corrida(ride_id: str, db: AsyncSession) -> RideModel | None:
+    """Busca o status de uma corrida pelo id no banco. Usado para o endpoint de consulta de status."""
+    result = await db.execute(select(RideModel.status).where(RideModel.id == ride_id))
+    status = result.scalar_one_or_none()
+    return status
+
+async def listar_corridas(db: AsyncSession, status: str | None = None) -> list[RideModel]:
+    """
+    Retorna todas as corridas. Não aceita mais `passenger_id` — o endpoint retorna
+    todas as corridas opcionamente filtradas por `status`.
+    """
+    q = select(RideModel)
+    if status:
+        # converte string para enum se precisar
+        try:
+            q = q.where(RideModel.status == RideStatus(status))
+            log_estruturado("filtro_status_aplicado", extras={"status": status})
+        except Exception:
+            # se o status for invalido, retorna vazio
+            log_estruturado("filtro_status_invalido", nivel="WARN", extras={"status": status})
+            return []
+    result = await db.execute(q)
+    return result.scalars().all()
+
+async def listar_corridas_em_andamento(db: AsyncSession) -> list[RideModel]:
+    in_progress = [RideStatus.MATCH, RideStatus.CONFIRM, RideStatus.IN_TRANSIT]
+    q = select(RideModel).where(RideModel.status.in_(in_progress))
+    result = await db.execute(q)
+    return result.scalars().all()
+
+def ride_to_response(ride_model: RideModel) -> dict:
+    """Converte um RideModel para um dicionário compatível com RideResponse."""
+    return {
+        "id": ride_model.id,
+        "status": ride_model.status,
+        "passenger_id": ride_model.passenger_id,
+        "driver_id": ride_model.driver_id,
+        "valor": ride_model.valor,
+        "eta": ride_model.eta,
+        "delegated_to": ride_model.delegated_to,
+        "core_ride_uuid": ride_model.core_ride_uuid,        
+        "delegation_winner": ride_model.delegation_winner,
+        "lamport_clock": ride_model.lamport_clock,
+        "origin": {
+            "lat": ride_model.origin_lat,
+            "lng": ride_model.origin_lng,
+            "street": ride_model.origin_street,
+            "number": ride_model.origin_number,
+            "city": ride_model.origin_city,
+            "state": ride_model.origin_state
+        },
+        "destination": {
+            "lat": ride_model.destination_lat,
+            "lng": ride_model.destination_lng,
+            "street": ride_model.destination_street,
+            "number": ride_model.destination_number,
+            "city": ride_model.destination_city,
+            "state": ride_model.destination_state
+        }
+    }
+
+async def receber_corrida_delegada(
+    ride_uuid: str,
+    origin: dict,
+    destination: dict,
+    passenger_id: str,
+    origin_service_id: str,
+    lamport_clock: int,
+    db: AsyncSession
+) -> Ride:
+    """
+    Processa uma corrida recebida por delegação do Core.
+    Cria a corrida no banco, atribui motorista e inicia a simulação.
+    """
+
+    corrida = Ride(
+        id=ride_uuid,
+        origin=Location(**origin),
+        destination=Location(**destination),
+        passenger_id=passenger_id,
+        status=RideStatus.MATCH,
+        delegated_to=origin_service_id,
+        lamport_clock=lamport_clock,
+    )
+
+    await salvar_corrida(corrida, db)
+    metrics.registrar_corrida_recebida()
+    await log_event(ride_uuid, "ride_received_from_core", {
+        "origin_service": origin_service_id
+    })
+
+    asyncio.ensure_future(_atribuir_motorista(corrida))
+
+    return corrida
+

@@ -4,14 +4,16 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.models.schemas import DriverRequest, DriverResponse, DriverStats
+from app.models.schemas import DriverRequest, DriverResponse, DriverStats, RideResponse
 from app.services.driver_service import (
     criar_motorista,
     listar_motoristas,
     buscar_motorista,
     atualizar_disponibilidade,
     deletar_motorista,
-    contar_motoristas
+    listar_corridas_por_motorista,
+    contar_motoristas,
+    ride_to_response
 )
 
 router = APIRouter(prefix="/drivers", tags=["drivers"])
@@ -36,6 +38,11 @@ async def get_driver(driver_id: str, db: AsyncSession = Depends(get_db)):
     if not motorista:
         raise HTTPException(status_code=404, detail="Motorista não encontrado")
     return motorista
+
+@router.get("/{driver_id}/rides", response_model=List[RideResponse], status_code=200)
+async def get_rides_for_driver(driver_id: str, db: AsyncSession = Depends(get_db)):
+    rides_db = await listar_corridas_por_motorista(driver_id, db)
+    return [ride_to_response(r) for r in rides_db]
 
 @router.patch("/{driver_id}/availability", response_model=DriverResponse, status_code=200)
 async def update_availability(driver_id: str, available: bool, db: AsyncSession = Depends(get_db)):

@@ -1,5 +1,38 @@
 services:
 
+  loki:
+    image: grafana/loki:2.9.0
+    ports:
+      - "3109:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - vrumvrum-net
+
+  grafana:
+    image: grafana/grafana:latest
+    restart: always
+    ports:
+      - "3009:3000"
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning
+      - ./infra/grafana/dashboards:/etc/grafana/dashboards
+    depends_on:
+      loki:
+        condition: service_started
+      prometheus:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    networks:
+      - vrumvrum-net
+
   nginx:
     image: nginx:alpine
     restart: always
@@ -20,11 +53,22 @@ services:
     restart: always
     environment:
       SERVICE_NAME: vrumvrum
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@vrumvrum-db:5432/vrumvrum
       INSTANCE_ID: api_1
+      RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
+      LOKI_URL: http://loki:3100
+      ORS_API_KEY: ${ORS_API_KEY}
     depends_on:
-      db:
+      rabbitmq:
         condition: service_healthy
+      vrumvrum-db:
+        condition: service_healthy
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "./entrypoint.sh"
+    ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -39,11 +83,24 @@ services:
     restart: always
     environment:
       SERVICE_NAME: vrumvrum
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/vrumvrum
+      DATABASE_URL: postgresql+asyncpg://postgres:postgres@vrumvrum-db:5432/vrumvrum
       INSTANCE_ID: api_2
+      RABBITMQ_URL: amqp://myuser:mypassword@rabbitmq:5672/
+      LOKI_URL: http://loki:3100
+      ORS_API_KEY: ${ORS_API_KEY}
     depends_on:
-      db:
+      rabbitmq:
         condition: service_healthy
+      vrumvrum-db:
+        condition: service_healthy
+    command: [
+      "dockerize",
+      "-wait", "tcp://rabbitmq:5672",
+      "-timeout", "60s",
+      "sh",
+      "-c",
+      "sleep 3 && ./entrypoint.sh"
+    ]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 10s
@@ -53,7 +110,7 @@ services:
     networks:
       - vrumvrum-net
 
-  db:
+  vrumvrum-db:
     image: postgres:16-alpine
     restart: always
     environment:
@@ -61,7 +118,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: vrumvrum
     ports:
-      - "5432:5432"
+      - "5439:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -72,8 +129,48 @@ services:
     networks:
       - vrumvrum-net
 
+  rabbitmq:
+      image: rabbitmq:3.9.4-management
+      container_name: ridefleet-rabbitmq-1
+      hostname: rabbitmq-server
+      ports:
+        - "5679:5672"
+        - "15679:15672"
+      volumes:
+        - rabbitmq_data:/var/lib/rabbitmq
+      environment:
+        - RABBITMQ_DEFAULT_USER=myuser
+        - RABBITMQ_DEFAULT_PASS=mypassword
+      healthcheck:
+          test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+          interval: 10s
+          timeout: 10s
+          retries: 5
+          start_period: 30s
+      networks:
+        - vrumvrum-net
+
+  prometheus:
+    image: prom/prometheus:latest
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9090/-/healthy"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9099:9090"
+    networks:
+      - vrumvrum-net
+
+
 volumes:
   pgdata:
+  rabbitmq_data:
+  prometheus_data:
+  grafana_data:
 
 networks:
   vrumvrum-net:

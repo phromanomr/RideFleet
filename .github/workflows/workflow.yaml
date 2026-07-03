@@ -24,17 +24,66 @@ jobs:
 
       - name: docker compose
         run: |
-          docker compose up -d db
+          docker compose up -d vrumvrum-db
           sleep 5
 
       # setup do banco de dados mockado
       - name: setup test dataset
         run: |
-          docker compose exec -T db psql -U postgres -c "CREATE DATABASE vrumvrum_test;"
+          docker compose exec -T vrumvrum-db psql -U postgres -c "CREATE DATABASE vrumvrum_test;"
 
       # Execução dos testes unitários
       - name: execute unitary tests
         env:
           PYTHONPATH: .
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
         run: |
-          pytest -s -v
+          pytest -k "not contract_test and not audit_test" -s -v
+
+      # Execução dos testes de contrato
+      - name: execute integration tests
+        env:
+          PYTHONPATH: .
+          ORS_API_KEY: ${{ secrets.ORS_API_KEY }}
+        run: |
+          pytest tests/contract_test.py tests/audit_test.py -s -v
+
+  build-and-push:
+      runs-on: ubuntu-latest
+      needs: continuous-integration
+      #if: github.ref == 'refs/heads/main'
+      
+      steps:
+        - uses: actions/checkout@v4
+        
+        - name: Log in Docker Hub
+          uses: docker/login-action@v3
+          with:
+            username: ${{ secrets.DOCKER_USERNAME }}
+            password: ${{ secrets.DOCKER_PASSWORD }}
+            
+        - name: Build and push Docker image
+          uses: docker/build-push-action@v5
+          with:
+            context: .
+            push: true
+            tags: phromanomr1/vrumvrum-api:latest
+
+  deploy:
+      runs-on: ubuntu-latest
+      needs: build-and-push 
+      #if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      
+      steps:
+        - name: Deploy Automático via SSH
+          uses: appleboy/ssh-action@v1.0.3
+          with:
+            host: ${{ secrets.SERVER_HOST }}
+            username: ${{ secrets.SERVER_USER }}
+            key: ${{ secrets.SERVER_SSH_KEY }}
+            
+            script: |
+              cd RideFleet
+              git pull origin main
+              sudo docker compose build api_1 api_2
+              sudo docker compose up -d --no-deps api_1 api_2

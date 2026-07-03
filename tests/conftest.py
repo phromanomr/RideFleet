@@ -13,11 +13,30 @@ from app.database import get_db, Base
 from app.models.driver_model import DriverModel 
 from app.models.ride_model import RideModel
 from app.distributed.logical_clock import lamport, _audit_log
+from sqlalchemy import text
+
+@pytest.fixture(scope="session", autouse=True)
+async def create_test_database():
+    # Conecta no banco padrão para poder criar o vrumvrum_test
+    root_engine = create_async_engine(
+        "postgresql+asyncpg://postgres:postgres@localhost:5439/postgres",
+        isolation_level="AUTOCOMMIT"
+    )
+    async with root_engine.connect() as conn:
+        result = await conn.execute(
+            text("SELECT 1 FROM pg_database WHERE datname = 'vrumvrum_test'")
+        )
+        exists = result.scalar()
+        if not exists:
+            await conn.execute(text("CREATE DATABASE vrumvrum_test"))
+
+    await root_engine.dispose()
+    yield
 
 # Definição da URL do banco de dados de teste
 SQLALCHEMY_DATABASE_URL = os.getenv(
     "TEST_DATABASE_URL", 
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/vrumvrum_test"
+    "postgresql+asyncpg://postgres:postgres@localhost:5439/vrumvrum_test"
 )
 
 # Criação do engine
