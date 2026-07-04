@@ -113,6 +113,38 @@ Sofia Castilho - 8145
 - Integração das funcionalidades de geolocalização com a interface do usuário.
 
 ## Phelipe Romano (8135)
+### Arquitetura da Aplicação e Persistência de Dados
+- Estruturação dos modelos de domínio ORM (`app/models/`) para motoristas, corridas, geolocalização e eventos de auditoria
+- Definição dos esquemas de serialização e validação de contratos de dados (DTOs) com Pydantic (`schemas.py` e `core_schemas.py`)
+- Configuração e gerenciamento do pool de conexões com o banco de dados relacional (`database.py`)
+- Estruturação do fluxo de controle de versão de schema do banco de dados com Alembic e redação dos scripts de migração iniciais
+
+### Núcleo da API RESTful e Roteamento HTTP
+- Configuração do ponto de entrada da API RESTful (`main.py`), injeção de middlewares globais e gerenciamento de estado da aplicação (`state.py`)
+- Desenvolvimento de endpoints e controladores para o ciclo de vida de corridas (`rides.py`), gestão de motoristas (`drivers.py`) e serviços espaciais (`geo_service.py`)
+- Exposição de rotas de monitoramento de saúde de contêineres (`health.py`) e consultas de histórico de eventos de auditoria (`audit.py`)
+
+### Sistemas Distribuídos e Federação (Core RideFleet)
+- Implementação do algoritmo de Relógio Lógico (*Logical Clock*) para sincronização de eventos em ambiente distribuído (`logical_clock.py`)
+- Construção da camada de serviços federados (`core_service.py`) para comunicação com o Core, gestão de leilões e controle de travas distribuídas
+
+### Mensageria e Processamento Assíncrono (RabbitMQ)
+- Integração com broker de mensageria RabbitMQ via `aio-pika` para desacoplamento assíncrono e processamento de filas de alta demanda (`rabbitmq_service.py`)
+- Implementação de consumidores assíncronos e produtores de mensagens integrados ao ciclo de vida da aplicação FastAPI
+
+### Observabilidade, Logging e Telemetria
+- Implementação de logging estruturado em formato JSON com envio assíncrono em background para o Grafana Loki
+- Instrumentação de telemetria e monitoramento de desempenho e negócio com exportação de métricas via Prometheus (`metrics.py`)
+- Provisionamento automatizado e estruturação de dashboards analíticos e operacionais no Grafana (`observabilidade.json` e `vrumvrum.json`)
+
+### Qualidade de Software e Testes Automatizados
+- Configuração do framework de testes Pytest, *fixtures* e clientes HTTP de teste (`pytest.ini` e `conftest.py`)
+- Desenvolvimento de suíte de testes unitários, de integração (`rides_test.py`, `drivers_test.py`), de relógio lógico e de contratos da API
+
+### CI/CD, Infraestrutura e DevOps
+- Containerização da aplicação via `Dockerfile` multi-stage e automação de pré-requisitos de inicialização (`entrypoint.sh`)
+- Orquestração de contêineres e balanceamento de tráfego entre instâncias distribuídas utilizando Docker Compose e Nginx
+- Construção de pipelines automatizados de CI/CD via GitHub Actions para *linting*, execução de testes, build e deploy contínuo em servidor remoto
 
 ## Sofia Castilho (8145)
 ### Banco de Dados e Persistência
