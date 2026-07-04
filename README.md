@@ -1,173 +1,159 @@
-# VrumVrum 🚗
+# 🚗 RideFleet — API Distribuída de Gestão de Corridas
 
-Serviço de transporte por aplicativo com federação distribuída.
-Projeto da disciplina SIN 142 — Sistemas Distribuídos — UFV 2026/1.
+O **RideFleet** é um serviço distribuído de despacho e gerenciamento de corridas urbanas e frotas, construído com foco em **alta disponibilidade**, **observabilidade**, **mensageria assíncrona** e **federação entre nós autônomos**. O sistema opera com múltiplas instâncias balanceadas e integradas a um ecossistema central (*Core*), garantindo ordenação temporal de eventos e tolerância a falhas.
 
-## Pré-requisitos
+---
 
-- Docker Desktop
+## 🏗️ Arquitetura e Funcionalidades
 
-## Como rodar
+- **API RESTful (FastAPI & Pydantic):** Endpoints completos para gestão de ciclo de vida de corridas (`/rides`), cadastro e triagem espacial de motoristas (`/drivers`, `/geo`) e trilha de auditoria (`/audit`).
+- **Mensageria Assíncrona (RabbitMQ):** Desacoplamento da ingestão de requisições e processamento em *background* via filas duráveis (`fila_entrada_corridas` e `fila_saida_corridas`), com controle de concorrência (*prefetch*) e TTL.
+- **Consistência Distribuída e Federação:**
+  - Implementação de **Relógio Lógico (*Logical Clock*)** para ordenação causal de eventos entre instâncias independentes.
+  - Integração contínua com a API do **Core RideFleet** para delegação de corridas (*overflow*), participação em leilões e renovação automática de travas distribuídas (*Distributed Locks*).
+- **Observabilidade Completa:**
+  - **Métricas (Prometheus):** Coleta em tempo real de latência HTTP, transições de estado, travas e volume de corridas locais e delegadas.
+  - **Logs Assíncronos (Grafana Loki):** Logging estruturado em formato JSON via *background worker* com rastreabilidade por requisição (`X-Request-ID`).
+  - **Dashboards (Grafana):** Provisionamento automatizado dos dashboards *VrumVrum* (negócio) e *Observabilidade* (infraestrutura).
+- **Balanceamento de Carga e Escala:** Múltiplas instâncias da API (`api_1` e `api_2`) orquestradas em rede e balanceadas via **Nginx**.
+- **Persistência Relacional:** Banco de dados **PostgreSQL** com controle de versionamento de esquema via **Alembic**.
+
+---
+
+## 🛠️ Tecnologias Utilizadas
+
+- **Linguagem:** Python 3.12+
+- **Framework Web:** FastAPI / Uvicorn
+- **ORM & Migrações:** SQLAlchemy (Async/Sync) & Alembic
+- **Mensageria:** RabbitMQ (`aio-pika`)
+- **Observabilidade:** Prometheus, Grafana, Loki & Structlog
+- **Infraestrutura & Proxy:** Docker, Docker Compose & Nginx
+- **CI/CD:** GitHub Actions
+
+---
+
+## 🚀 Como Executar o Projeto
+
+A execução de todo o ecossistema (APIs, Banco de Dados, Mensageria e Observabilidade) é gerenciada de forma centralizada via **Docker Compose**.
+
+### Pré-requisitos
+
+- [Docker](https://docs.docker.com/get-docker/) e Docker Compose instalados.
+- Python 3.12+ instalado localmente (para dependências e testes).
+
+### Passo a Passo
+
+#### 1. Clone o repositório
 
 ```bash
-python -m venv venv
+git clone https://github.com/phromanomr/ridefleet.git
 ```
+
+#### 2. Acesse a pasta do projeto
+
 ```bash
-venv\Scripts\activate  
+cd ridefleet
 ```
+
+#### 3. Instale as dependências locais
+
 ```bash
-docker compose up --build
+pip install -r requirements.txt
 ```
 
-A API estará disponível em `http://localhost` (porta 80, via Nginx).
-Documentação interativa em `http://localhost/docs`.
+#### 4. Construa as imagens dos contêineres
 
-> O Docker sobe automaticamente: banco de dados, duas instâncias da API e o load balancer Nginx. Não é necessário configurar nada manualmente.
-
----
-
-## Endpoints disponíveis
-
-### Corridas
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/rides/` | Solicitar uma corrida |
-| GET | `/rides/{id}` | Consultar status de uma corrida |
-| GET | `/audit/rides/{id}` | Log causal da corrida (Lamport) |
-
-### Motoristas
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| POST | `/drivers/` | Cadastrar motorista |
-| GET | `/drivers/all` | Listar todos os motoristas |
-| GET | `/drivers/stats` | Total e disponibilidade de motoristas |
-| GET | `/drivers/{id}` | Consultar motorista |
-| PATCH | `/drivers/{id}/availability` | Atualizar disponibilidade |
-| DELETE | `/drivers/{id}` | Remover motorista |
-
-### Sistema
-| Método | Rota | Descrição |
-|--------|------|-----------|
-| GET | `/health` | Health check do serviço |
-
----
-
-## Arquitetura
-
+```bash
+docker-compose build
 ```
-Internet
-    │
-    ▼
- Nginx (porta 80)       ← load balancer (round-robin)
-    │
-    ├── api_1 (porta 8000)
-    └── api_2 (porta 8000)
 
- PostgreSQL (porta 5432) ← persistência
- Loki (porta 3100)       ← coleta de logs
- Grafana (porta 3000)    ← visualização de logs
+#### 5. Suba a infraestrutura em segundo plano
+
+```bash
+docker-compose up -d
+```
+
+Este comando iniciará:
+
+- PostgreSQL
+- RabbitMQ
+- Prometheus
+- Loki
+- Grafana
+- Instâncias da API (`api_1` e `api_2`)
+- Proxy Nginx
+
+#### 6. Verifique o status dos serviços
+
+```bash
+docker-compose ps
 ```
 
 ---
 
-## Mecanismos de SD
+## 🌐 Endpoints e Portas Acessíveis
 
-Os mecanismos de sistemas distribuídos (travas, saga, consenso, circuit breaker e relógio lógico) são implementados e fornecidos pelo **Core** do RideFleet. O VrumVrum consome esses mecanismos via API padronizada — não os reimplementa.
-
-| # | Requisito | Responsável |
-|---|-----------|-------------|
-| 1 | Travas Distribuídas | Core |
-| 2 | Saga / Commit Distribuído | Core |
-| 3 | Consenso / Leilão | Core |
-| 4 | Circuit Breaker | Core |
-| 5 | Relógio Lógico de Lamport | Core |
+| Serviço | URL | Descrição |
+|----------|------|------------|
+| API Principal (via Nginx) | `http://localhost:80` | Gateway de entrada balanceado para a API REST |
+| Swagger/OpenAPI | `http://localhost/docs` | Interface para testes de requisições |
+| RabbitMQ Management | `http://localhost:15672` | Gestão de filas (*guest / guest*) |
+| Grafana | `http://localhost:3000` | Dashboards de telemetria e logs (*admin / admin*) |
+| Métricas Prometheus (API 1) | `http://localhost:8001/metrics` | Exportação de métricas da Instância 1 |
 
 ---
 
-## Visualizar Logs
+## 🧪 Executando Testes Automatizados
 
-O VrumVrum envia logs estruturados em JSON para o **Grafana Loki**, visualizáveis via **Grafana**.
+O projeto possui uma suíte de testes unitários, de integração, validação de auditoria e verificação do relógio lógico.
 
-### URLs
+### Executar localmente
 
-| Serviço | URL | Credenciais |
-|---------|-----|-------------|
-| Grafana | `http://localhost:3000` | admin / admin |
-| Loki (API) | `http://localhost:3100` | — |
-
-### Consultar logs no Grafana
-
-1. Acessa `http://localhost:3000`
-2. No menu lateral, clica em **Explore**
-3. Seleciona o datasource **Loki**
-4. Em **Label filters** seleciona `service` = `vrumvrum` e clica **Run query**
-
-**Exemplos de queries LogQL:**
-
-Todos os logs do serviço:
-```
-{service="vrumvrum"}
+```bash
+pytest -v
 ```
 
-Filtrar por corrida (substitui pelo UUID retornado no POST /rides):
-```
-{service="vrumvrum"} | json | corrida_id="<uuid-da-corrida>"
-```
+### Executar dentro de um contêiner ativo
 
-Apenas erros:
+```bash
+docker-compose exec api_1 pytest -v
 ```
-{service="vrumvrum", level="error"}
-```
-
-Filtrar por tipo de evento:
-```
-{service="vrumvrum"} | json | event="ride_requested"
-```
-
-### Variáveis de ambiente
-
-| Variável | Padrão | Descrição |
-|----------|--------|-----------|
-| `LOG_LEVEL` | `INFO` | Nível de log (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
-| `LOKI_URL` | — | URL do Loki (definida automaticamente pelo Docker) |
 
 ---
 
-## Estrutura do projeto
+## 🔄 Automação e CI/CD
 
-```
+O pipeline automatizado via **GitHub Actions** (`.github/workflows/workflow.yaml`) garante qualidade e entrega contínua do código.
 
-app/
-├── main.py                  — entrypoint da API
-├── config.py                — constantes de configuração
-├── state.py                 — estado em memória (fila, corridas)
-├── database.py              — configuração do banco
-├── logging_config.py        — configuração de logs estruturados (structlog)
-├── logging_handlers.py      — handler HTTP para envio ao Loki
-├── distributed/
-│   └── logical_clock.py     — integração com o relógio de Lamport do Core
-├── models/
-│   ├── ride.py              — dataclass da corrida
-│   ├── ride_model.py        — modelo SQLAlchemy da corrida
-│   ├── driver.py            — dataclass do motorista
-│   ├── driver_model.py      — modelo SQLAlchemy do motorista
-│   ├── location.py          — modelo de endereço
-│   └── schemas.py           — schemas Pydantic
-├── routers/
-│   ├── rides.py             — endpoints de corrida
-│   ├── drivers.py           — endpoints de motorista
-│   └── audit.py             — endpoints de auditoria
-├── services/
-│   ├── ride_service.py      — lógica de negócio das corridas
-│   └── driver_service.py    — lógica de negócio dos motoristas
-infra/
-├── nginx/
-│   └── nginx.conf           — configuração do load balancer
-└── grafana/
-    └── provisioning/
-        └── datasources/
-            └── loki.yml     — auto-provisioning do Loki como datasource
-alembic/                     — migrations do banco
-tests/                       — testes unitários
-```
+### Integração Contínua (CI)
 
+A cada **Push** ou **Pull Request**, o pipeline:
+
+- Provisiona o ambiente de testes;
+- Instala dependências;
+- Valida a integridade do projeto;
+- Executa a suíte completa de testes;
+- Realiza verificações automatizadas de qualidade.
+
+### Entrega Contínua (CD)
+
+Após aprovação e integração na branch principal:
+
+- A imagem Docker é construída;
+- A imagem é enviada para o registro configurado;
+- O ambiente remoto é atualizado automaticamente via conexão segura (SSH).
+
+---
+
+## 📊 Principais Características
+
+✅ Arquitetura distribuída e escalável  
+✅ Balanceamento de carga com Nginx  
+✅ Comunicação assíncrona com RabbitMQ  
+✅ Ordenação causal com Relógio Lógico  
+✅ Integração federada com Core RideFleet  
+✅ Observabilidade completa com Prometheus, Loki e Grafana  
+✅ Persistência relacional com PostgreSQL  
+✅ Migrações automatizadas com Alembic  
+✅ Pipeline CI/CD com GitHub Actions  
+✅ Ambiente totalmente containerizado com Docker Compose
